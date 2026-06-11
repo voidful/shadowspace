@@ -20,6 +20,7 @@
 - **Hysteria2 / TUIC**：需要自訂 QUIC 壅塞控制與混淆，Apple 的 QUIC 是黑盒。
 - **gRPC（gun）**：需要全雙工 HTTP/2 雙向串流，但 Network.framework 無公開 HTTP/2；
   自行實作 HTTP/2（HPACK + 框架 + 流量控制）工程量比 VMess 更大。**WebSocket 已涵蓋多數 CDN 傳輸需求**，故不做。
+- **WireGuard**：L3 VPN（需處理 IP 封包 + userspace TCP/IP stack），與本核心 flow 式代理架構不合；走 sing-box 引擎（已支援）。
 
 > 需要上述協議的使用者，請改用 Developer ID 發佈版（內嵌 sing-box，功能完整）。
 

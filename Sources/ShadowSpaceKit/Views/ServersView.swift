@@ -240,7 +240,7 @@ struct ImportSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("匯入節點或訂閱")
                 .font(.headline)
-            Text("支援 ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// 分享連結、base64 內容，或 http(s) 訂閱網址，可一次貼多行。")
+            Text("支援 ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// 分享連結、WireGuard .conf 設定檔、base64 內容，或 http(s) 訂閱網址，可一次貼多行。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             TextEditor(text: $text)
