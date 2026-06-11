@@ -70,8 +70,13 @@ enum SingBoxConfigBuilder {
                 "interval": "5m",
             ])
         }
+        var endpoints: [[String: Any]] = []
         for node in nodes {
-            outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!))
+            if node.proto == .wireguard {
+                endpoints.append(wireguardEndpoint(for: node, tag: tagByNodeID[node.id]!))
+            } else {
+                outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!))
+            }
         }
         outbounds.append(["type": "direct", "tag": directTag])
 
@@ -173,7 +178,7 @@ enum SingBoxConfigBuilder {
             "listen_port": settings.mixedPort,
         ])
 
-        let config: [String: Any] = [
+        var config: [String: Any] = [
             "log": ["level": "info", "timestamp": true],
             "dns": dns,
             "inbounds": inbounds,
@@ -188,6 +193,9 @@ enum SingBoxConfigBuilder {
                 "cache_file": ["enabled": true],
             ],
         ]
+        if !endpoints.isEmpty {
+            config["endpoints"] = endpoints
+        }
         return BuildResult(json: config, tagByNodeID: tagByNodeID)
     }
 
@@ -253,6 +261,29 @@ enum SingBoxConfigBuilder {
 
     // MARK: - 單一節點 → outbound
 
+    /// WireGuard 在 sing-box 1.11+ 是 endpoint（非 outbound）。
+    static func wireguardEndpoint(for node: ProxyNode, tag: String) -> [String: Any] {
+        var peer: [String: Any] = [
+            "address": node.server,
+            "port": node.port,
+            "public_key": node.wgPeerPublicKey ?? "",
+            "allowed_ips": ["0.0.0.0/0", "::/0"],
+            "persistent_keepalive_interval": 25,
+        ]
+        if let psk = node.wgPresharedKey, !psk.isEmpty {
+            peer["pre_shared_key"] = psk
+        }
+        var endpoint: [String: Any] = [
+            "type": "wireguard",
+            "tag": tag,
+            "address": node.wgLocalAddress ?? ["172.16.0.2/32"],
+            "private_key": node.wgPrivateKey ?? "",
+            "peers": [peer],
+        ]
+        if let mtu = node.wgMTU { endpoint["mtu"] = mtu }
+        return endpoint
+    }
+
     static func outbound(for node: ProxyNode, tag: String) -> [String: Any] {
         var ob: [String: Any] = [
             "tag": tag,
@@ -260,6 +291,8 @@ enum SingBoxConfigBuilder {
             "server_port": node.port,
         ]
         switch node.proto {
+        case .wireguard:
+            ob["type"] = "direct"   // 不會到這：WG 走 endpoint，已在 build() 過濾
         case .shadowsocks:
             ob["type"] = "shadowsocks"
             ob["method"] = node.method ?? "aes-256-gcm"

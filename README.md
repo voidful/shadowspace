@@ -29,7 +29,7 @@
 - **TUN／增強模式**：建立虛擬網卡接管「全部」流量（含終端機與不吃系統代理的 App），
   如同 Shadowrocket 的 VPN 模式；連線時輸入一次管理員密碼即可
 - **三種模式**：規則（中國大陸網站直連、其餘走代理）／全域／直連，連線中可熱切換、不需重啟
-- **協議支援**：Shadowsocks、VMess、VLESS（含 Reality）、Trojan、Hysteria2、TUIC、SOCKS5
+- **協議支援**：Shadowsocks、VMess、VLESS（含 Reality）、Trojan、Hysteria2、TUIC、SOCKS5、WireGuard
 - **分流規則編輯器**：網域後綴／關鍵字／IP 區段／GeoIP／Geosite／程序名稱，
   策略可選代理、直連、拒絕，拖曳排序；內建**一鍵廣告阻擋**
 - **連線檢視器**：即時顯示每條連線的目標、命中規則、出口節點與流量，可強制中斷

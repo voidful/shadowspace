@@ -22,17 +22,41 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: Binding(
-                    get: { state.settings.tunMode },
-                    set: { state.settings.tunMode = $0; state.saveAndApply() }
+                Picker("代理引擎", selection: Binding(
+                    get: { state.settings.engineKind },
+                    set: { newKind in
+                        state.settings.engineKind = newKind
+                        state.save()
+                        if state.connectionState == .connected {
+                            state.toastMessage = "已切換引擎，重新連線後生效"
+                        }
+                    }
                 )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("TUN 模式（增強模式）")
-                        Text("建立虛擬網卡接管全部流量，含終端機與不吃系統代理的 App。連線時需輸入一次管理員密碼。")
-                            .font(.caption).foregroundStyle(.secondary)
+                    ForEach(EngineKind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
                     }
                 }
-                if !state.settings.tunMode {
+            } header: {
+                Text("引擎")
+            } footer: {
+                Text("原生引擎純 Apple 框架、可上 App Store，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整（Developer ID 發佈版）。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                if state.settings.engineKind == .singbox {
+                    Toggle(isOn: Binding(
+                        get: { state.settings.tunMode },
+                        set: { state.settings.tunMode = $0; state.saveAndApply() }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("TUN 模式（增強模式）")
+                            Text("建立虛擬網卡接管全部流量，含終端機與不吃系統代理的 App。連線時需輸入一次管理員密碼。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if state.settings.engineKind == .native || !state.settings.tunMode {
                     Toggle("連線時自動設定系統代理", isOn: Binding(
                         get: { state.settings.autoSystemProxy },
                         set: { state.settings.autoSystemProxy = $0; state.save() }

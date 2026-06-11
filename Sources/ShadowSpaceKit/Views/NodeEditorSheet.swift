@@ -84,6 +84,8 @@ struct NodeEditorSheet: View {
             return !(draft.uuid ?? "").isEmpty
         case .socks:
             return true
+        case .wireguard:
+            return !(draft.wgPrivateKey ?? "").isEmpty && !(draft.wgPeerPublicKey ?? "").isEmpty
         }
     }
 
@@ -135,6 +137,9 @@ struct NodeEditorSheet: View {
             case .socks:
                 TextField("帳號（可空）", text: optional($draft.username))
                 SecureInput("密碼（可空）", text: optional($draft.password))
+            case .wireguard:
+                Text("WireGuard 請用「貼上匯入」貼入 .conf 設定檔內容")
+                    .font(.callout).foregroundStyle(.secondary)
             }
         }
     }
@@ -144,7 +149,7 @@ struct NodeEditorSheet: View {
     private var showsTLSSection: Bool {
         switch draft.proto {
         case .vmess, .vless, .trojan, .hysteria2, .tuic: return true
-        case .shadowsocks, .socks: return false
+        case .shadowsocks, .socks, .wireguard: return false
         }
     }
 

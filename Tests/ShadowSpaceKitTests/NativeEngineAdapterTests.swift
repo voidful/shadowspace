@@ -1,0 +1,72 @@
+import XCTest
+import ShadowCore
+@testable import ShadowSpaceKit
+
+final class NativeEngineAdapterTests: XCTestCase {
+
+    func testSupportedMappings() throws {
+        var ss = ProxyNode(name: "ss1", proto: .shadowsocks, server: "1.2.3.4", port: 8388)
+        ss.method = "aes-256-gcm"; ss.password = "pw"
+        XCTAssertEqual(try NativeEngineAdapter.outbound(for: ss).name, "ss1")
+
+        var trojan = ProxyNode(name: "t", proto: .trojan, server: "x.com", port: 443)
+        trojan.password = "pw"; trojan.tls = true
+        XCTAssertEqual(try NativeEngineAdapter.outbound(for: trojan).name, "t")
+
+        var vless = ProxyNode(name: "v", proto: .vless, server: "x.com", port: 443)
+        vless.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"; vless.tls = true
+        XCTAssertEqual(try NativeEngineAdapter.outbound(for: vless).name, "v")
+
+        let socks = ProxyNode(name: "s", proto: .socks, server: "x.com", port: 1080)
+        XCTAssertEqual(try NativeEngineAdapter.outbound(for: socks).name, "s")
+    }
+
+    func testUnsupportedThrows() {
+        let vmess = ProxyNode(name: "m", proto: .vmess, server: "x", port: 1)
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: vmess))
+        let hy = ProxyNode(name: "h", proto: .hysteria2, server: "x", port: 1)
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: hy))
+        let tuic = ProxyNode(name: "u", proto: .tuic, server: "x", port: 1)
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: tuic))
+
+        var reality = ProxyNode(name: "r", proto: .vless, server: "x", port: 443)
+        reality.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+        reality.realityPublicKey = "PBK"
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: reality))
+    }
+
+    func testTransportWS() {
+        var node = ProxyNode(name: "w", proto: .vless, server: "x", port: 443)
+        node.network = "ws"; node.wsPath = "/p"; node.wsHost = "cdn.com"; node.tls = true
+        let cfg = NativeEngineAdapter.transport(for: node, defaultTLS: true)
+        XCTAssertEqual(cfg.network, .ws)
+        XCTAssertEqual(cfg.wsPath, "/p")
+        XCTAssertEqual(cfg.wsHost, "cdn.com")
+        XCTAssertTrue(cfg.tls)
+    }
+
+    func testRouterFromRulesAndModes() {
+        var r1 = UserRule(); r1.type = .domainSuffix; r1.value = "ads.com"; r1.policy = .reject
+        var r2 = UserRule(); r2.type = .domainKeyword; r2.value = "google"; r2.policy = .proxy
+
+        let ruleRouter = NativeEngineAdapter.makeRouter(proxy: DirectOutbound(), rules: [r1, r2], mode: .rule)
+        XCTAssertEqual(ruleRouter.policy(for: Target(host: "x.ads.com", port: 443)), .reject)
+        XCTAssertEqual(ruleRouter.policy(for: Target(host: "www.google.com", port: 443)), .proxy)
+        XCTAssertEqual(ruleRouter.policy(for: Target(host: "other.net", port: 443)), .proxy) // final
+
+        // 全域：忽略規則，全走 proxy
+        let global = NativeEngineAdapter.makeRouter(proxy: DirectOutbound(), rules: [r1], mode: .global)
+        XCTAssertEqual(global.policy(for: Target(host: "x.ads.com", port: 443)), .proxy)
+
+        // 直連：全走 direct
+        let direct = NativeEngineAdapter.makeRouter(proxy: DirectOutbound(), rules: [r1], mode: .direct)
+        XCTAssertEqual(direct.policy(for: Target(host: "anything", port: 443)), .direct)
+    }
+
+    func testGeoRulesSkippedNotCrash() {
+        var geo = UserRule(); geo.type = .geosite; geo.value = "netflix"; geo.policy = .proxy
+        // 原生不支援 geosite，應略過而非崩潰，final = proxy
+        let router = NativeEngineAdapter.makeRouter(proxy: DirectOutbound(), rules: [geo], mode: .rule)
+        XCTAssertEqual(router.policy(for: Target(host: "netflix.com", port: 443)), .proxy)
+    }
+}
