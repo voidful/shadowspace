@@ -11,6 +11,36 @@ let port = UInt16(args.dropFirst().first(where: { UInt16($0) != nil }) ?? "") ??
 
 func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
 
+/// 最小 vless:// 解析（測試用）：vless://uuid@host:port?security&type&sni&host&path#name
+func parseVlessURI(_ uri: String) -> Outbound? {
+    guard uri.hasPrefix("vless://") else { return nil }
+    var rest = String(uri.dropFirst("vless://".count))
+    if let h = rest.firstIndex(of: "#") { rest = String(rest[..<h]) }
+    var query: [String: String] = [:]
+    if let q = rest.firstIndex(of: "?") {
+        for pair in rest[rest.index(after: q)...].split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            if kv.count == 2 { query[String(kv[0])] = String(kv[1]).removingPercentEncoding ?? String(kv[1]) }
+        }
+        rest = String(rest[..<q])
+    }
+    guard let at = rest.firstIndex(of: "@") else { return nil }
+    let uuid = String(rest[..<at])
+    let hostPort = rest[rest.index(after: at)...]
+    guard let colon = hostPort.lastIndex(of: ":"),
+          let port = UInt16(hostPort[hostPort.index(after: colon)...]) else { return nil }
+    let host = String(hostPort[..<colon])
+    var t = TransportConfig()
+    t.tls = (query["security"] == "tls" || query["security"] == "reality")
+    t.sni = query["sni"]
+    if query["type"] == "ws" {
+        t.network = .ws
+        t.wsPath = query["path"] ?? "/"
+        t.wsHost = query["host"]
+    }
+    return VlessOutbound(name: "vless", host: host, port: port, uuid: uuid, transport: t)
+}
+
 let outbound: Outbound
 if let i = args.firstIndex(of: "--socks"), i + 1 < args.count {
     let parts = args[i + 1].split(separator: ":")
@@ -20,6 +50,10 @@ if let i = args.firstIndex(of: "--socks"), i + 1 < args.count {
     } else {
         log("--socks 參數格式錯誤"); exit(1)
     }
+} else if let i = args.firstIndex(of: "--vless"), i + 1 < args.count {
+    guard let o = parseVlessURI(args[i + 1]) else { log("--vless URI 解析失敗"); exit(1) }
+    outbound = o
+    log("出站 = VLESS（\(args[i + 1].prefix(50))…）")
 } else {
     outbound = DirectOutbound()
 }
