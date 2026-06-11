@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import ShadowCore
 
 /// App 的中央狀態：節點、訂閱、規則、連線生命週期、流量統計。
 @MainActor
@@ -38,6 +39,9 @@ final class AppState: ObservableObject {
     @Published var toastMessage: String?          // 輕量回饋（匯入成功等）
 
     private let engine = EngineManager()
+    private var nativeEngine: NativeEngine?
+    private var nativeLastUp = 0
+    private var nativeLastDown = 0
     private var trafficTask: Task<Void, Never>?
     private var connectionsTask: Task<Void, Never>?
     private var autoUpdateTimer: Timer?
@@ -141,6 +145,12 @@ final class AppState: ObservableObject {
             return
         }
         connectionState = .connecting
+
+        if settings.engineKind == .native {
+            await connectNative()
+            return
+        }
+
         do {
             // 引擎不存在就自動下載，新手不用碰終端機
             if EngineManager.findBinary() == nil {
@@ -200,6 +210,62 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - 原生引擎（App Store 路線）
+
+    private func connectNative() async {
+        guard let node = selectedNode else {
+            connectionState = .disconnected
+            errorMessage = "找不到可用節點"
+            return
+        }
+        do {
+            let outbound = try NativeEngineAdapter.outbound(for: node)
+            let router = NativeEngineAdapter.makeRouter(proxy: outbound, rules: rules, mode: mode)
+            let listenHost = settings.allowLAN ? "0.0.0.0" : "127.0.0.1"
+            let eng = NativeEngine(listenHost: listenHost,
+                                   port: UInt16(clamping: settings.mixedPort), router: router)
+            try eng.start()
+            nativeEngine = eng
+
+            if settings.autoSystemProxy {
+                try SystemProxyManager.enable(port: settings.mixedPort)
+                systemProxyActive = true
+            }
+            nativeLastUp = 0; nativeLastDown = 0
+            sessionUpTotal = 0; sessionDownTotal = 0
+            upRate = 0; downRate = 0
+            engineLog = ["[原生引擎] 啟動於 127.0.0.1:\(settings.mixedPort)，出站「\(node.name)」（\(node.proto.displayName)）"]
+            startNativeTrafficPolling()
+            connectionState = .connected
+            save()
+        } catch {
+            nativeEngine?.stop(); nativeEngine = nil
+            if systemProxyActive { SystemProxyManager.disable(); systemProxyActive = false }
+            connectionState = .disconnected
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func startNativeTrafficPolling() {
+        trafficTask?.cancel()
+        trafficTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self else { return }
+                self.pollNativeTraffic()
+            }
+        }
+    }
+
+    private func pollNativeTraffic() {
+        guard let eng = nativeEngine else { return }
+        let up = eng.upTotal, down = eng.downTotal
+        upRate = max(0, up - nativeLastUp)
+        downRate = max(0, down - nativeLastDown)
+        nativeLastUp = up; nativeLastDown = down
+        sessionUpTotal = up; sessionDownTotal = down
+    }
+
     func disconnect() async {
         guard connectionState == .connected else { return }
         connectionState = .stopping
@@ -214,6 +280,8 @@ final class AppState: ObservableObject {
             systemProxyActive = false
         }
         engine.stop()
+        nativeEngine?.stop()
+        nativeEngine = nil
         upRate = 0
         downRate = 0
         connections = []
@@ -226,6 +294,7 @@ final class AppState: ObservableObject {
             SystemProxyManager.disable()
         }
         engine.stop()
+        nativeEngine?.stop()
         save()
     }
 
@@ -258,16 +327,24 @@ final class AppState: ObservableObject {
     func setMode(_ newMode: ProxyMode) {
         mode = newMode
         save()
-        if connectionState == .connected {
-            let client = api
-            Task { await client.setMode(newMode.clashMode) }
+        guard connectionState == .connected else { return }
+        if settings.engineKind == .native {
+            Task { await disconnect(); await connect() }
+            return
         }
+        let client = api
+        Task { await client.setMode(newMode.clashMode) }
     }
 
     func selectNode(_ id: UUID) {
         selectedNodeID = id
         save()
-        guard connectionState == .connected, let tag = tagByNodeID[id] else { return }
+        guard connectionState == .connected else { return }
+        if settings.engineKind == .native {
+            Task { await disconnect(); await connect() }
+            return
+        }
+        guard let tag = tagByNodeID[id] else { return }
         let client = api
         Task { [weak self] in
             do {

@@ -19,7 +19,7 @@ let package = Package(
         ),
 
         // 現有 GUI（仍走 sing-box 子程序；Developer ID 發佈路線）
-        .target(name: "ShadowSpaceKit", path: "Sources/ShadowSpaceKit"),
+        .target(name: "ShadowSpaceKit", dependencies: ["ShadowCore"], path: "Sources/ShadowSpaceKit"),
         .executableTarget(
             name: "ShadowSpace",
             dependencies: ["ShadowSpaceKit"],
@@ -27,7 +27,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ShadowSpaceKitTests",
-            dependencies: ["ShadowSpaceKit"],
+            dependencies: ["ShadowSpaceKit", "ShadowCore"],
             path: "Tests/ShadowSpaceKitTests"
         ),
     ]

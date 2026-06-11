@@ -217,6 +217,18 @@ struct UserRule: Codable, Identifiable, Hashable {
 
 // MARK: - 設定
 
+enum EngineKind: String, Codable, CaseIterable {
+    case singbox
+    case native
+
+    var displayName: String {
+        switch self {
+        case .singbox: return "sing-box（完整）"
+        case .native: return "原生（App Store）"
+        }
+    }
+}
+
 struct AppSettings: Codable {
     var mixedPort = 7890
     var apiPort = 9090
@@ -235,12 +247,14 @@ struct AppSettings: Codable {
     var localDNS = "223.5.5.5"
     /// 訂閱自動更新間隔（小時，0 = 關閉）
     var subAutoUpdateHours = 0
+    /// 代理引擎：sing-box（完整）或 native（純原生，App Store 相容）
+    var engineKind: EngineKind = .singbox
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
-        case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours
+        case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -257,6 +271,7 @@ struct AppSettings: Codable {
         remoteDNS = try c.decodeIfPresent(String.self, forKey: .remoteDNS) ?? "8.8.8.8"
         localDNS = try c.decodeIfPresent(String.self, forKey: .localDNS) ?? "223.5.5.5"
         subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
+        engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .singbox
     }
 }
 
