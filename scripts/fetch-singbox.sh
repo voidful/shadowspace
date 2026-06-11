@@ -15,8 +15,9 @@ esac
 VERSION="${SINGBOX_VERSION:-}"
 if [ -z "$VERSION" ]; then
   echo "==> 查詢 sing-box 最新版本…"
-  VERSION=$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest \
-    | grep -m1 '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
+  # 先完整收下 API 回應再解析，避免 curl | grep -m1 早退觸發 SIGPIPE（curl error 56）
+  API_JSON=$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest)
+  VERSION=$(printf '%s\n' "$API_JSON" | sed -n 's/.*"tag_name":[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p')
 fi
 if [ -z "$VERSION" ]; then
   echo "無法取得版本資訊。可手動指定：SINGBOX_VERSION=1.12.0 $0"
