@@ -24,7 +24,16 @@ if let i = args.firstIndex(of: "--socks"), i + 1 < args.count {
     outbound = DirectOutbound()
 }
 
-let engine = NativeEngine(port: port, outbound: outbound)
+let engine: NativeEngine
+if let i = args.firstIndex(of: "--reject"), i + 1 < args.count {
+    let suffix = args[i + 1]
+    let router = Router(rules: [RoutingRule(.domainSuffix(suffix), .reject)],
+                        proxy: outbound, finalPolicy: .proxy)
+    engine = NativeEngine(port: port, router: router)
+    log("規則：reject *.\(suffix)，其餘走 \(outbound.name)")
+} else {
+    engine = NativeEngine(port: port, outbound: outbound)
+}
 do {
     try engine.start()
     log("shadow-demo 監聽 127.0.0.1:\(port)")
