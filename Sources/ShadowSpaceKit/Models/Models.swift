@@ -10,6 +10,7 @@ enum NodeProtocol: String, Codable, CaseIterable {
     case hysteria2
     case tuic
     case socks
+    case wireguard
 
     var displayName: String {
         switch self {
@@ -20,6 +21,7 @@ enum NodeProtocol: String, Codable, CaseIterable {
         case .hysteria2: return "Hysteria2"
         case .tuic: return "TUIC"
         case .socks: return "SOCKS"
+        case .wireguard: return "WireGuard"
         }
     }
 }
@@ -63,6 +65,13 @@ struct ProxyNode: Codable, Identifiable, Hashable {
 
     // TUIC
     var congestionControl: String?
+
+    // WireGuard
+    var wgPrivateKey: String?
+    var wgPeerPublicKey: String?
+    var wgPresharedKey: String?
+    var wgLocalAddress: [String]?
+    var wgMTU: Int?
 
     // 來源訂閱（手動新增為 nil）
     var subscriptionID: UUID?

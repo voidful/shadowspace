@@ -106,6 +106,8 @@ enum NodeShare {
                 return "socks://\(userinfo)@\(host):\(node.port)\(name)"
             }
             return "socks://\(host):\(node.port)\(name)"
+        case .wireguard:
+            return nil   // WireGuard 用設定檔，無分享連結
         }
     }
 

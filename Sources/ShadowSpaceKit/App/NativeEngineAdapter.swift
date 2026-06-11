@@ -51,6 +51,8 @@ enum NativeEngineAdapter {
             throw AdapterError.unsupported("原生引擎不支援 Hysteria2（QUIC），請改用 sing-box 引擎")
         case .tuic:
             throw AdapterError.unsupported("原生引擎不支援 TUIC（QUIC），請改用 sing-box 引擎")
+        case .wireguard:
+            throw AdapterError.unsupported("原生引擎不支援 WireGuard（需 Packet Tunnel），請改用 sing-box 引擎")
         }
     }
 

@@ -95,6 +95,9 @@ enum URIParser {
            decoded.contains("://") {
             content = decoded
         }
+        if WireGuardParser.looksLikeConfig(content), let wg = WireGuardParser.parse(content) {
+            return (nodes: [wg], subscriptionURLs: [])
+        }
         var nodes: [ProxyNode] = []
         var subs: [String] = []
         for rawLine in content.split(whereSeparator: \.isNewline) {
