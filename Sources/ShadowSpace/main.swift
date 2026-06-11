@@ -1,0 +1,3 @@
+import ShadowSpaceKit
+
+ShadowSpaceRoot.main()

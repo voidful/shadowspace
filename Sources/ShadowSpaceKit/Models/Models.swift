@@ -1,0 +1,336 @@
+import Foundation
+
+// MARK: - 協議類型
+
+enum NodeProtocol: String, Codable, CaseIterable {
+    case shadowsocks
+    case vmess
+    case vless
+    case trojan
+    case hysteria2
+    case tuic
+    case socks
+
+    var displayName: String {
+        switch self {
+        case .shadowsocks: return "SS"
+        case .vmess: return "VMess"
+        case .vless: return "VLESS"
+        case .trojan: return "Trojan"
+        case .hysteria2: return "Hysteria2"
+        case .tuic: return "TUIC"
+        case .socks: return "SOCKS"
+        }
+    }
+}
+
+// MARK: - 節點
+
+struct ProxyNode: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var proto: NodeProtocol
+    var server: String
+    var port: Int
+
+    // 認證
+    var method: String?          // ss 加密方式
+    var password: String?        // ss / trojan / hysteria2 / tuic
+    var uuid: String?            // vmess / vless / tuic
+    var alterId: Int?            // vmess
+    var security: String?        // vmess 加密 (scy)
+    var flow: String?            // vless (xtls-rprx-vision)
+    var username: String?        // socks
+
+    // TLS
+    var tls: Bool = false
+    var sni: String?
+    var insecure: Bool = false
+    var alpn: [String]?
+    var fingerprint: String?     // uTLS 指紋
+    var realityPublicKey: String?
+    var realityShortID: String?
+
+    // 傳輸層
+    var network: String?         // ws / grpc / http
+    var wsPath: String?
+    var wsHost: String?
+    var grpcServiceName: String?
+
+    // Hysteria2 混淆
+    var obfs: String?
+    var obfsPassword: String?
+
+    // TUIC
+    var congestionControl: String?
+
+    // 來源訂閱（手動新增為 nil）
+    var subscriptionID: UUID?
+}
+
+// MARK: - 訂閱
+
+struct Subscription: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var url: String
+    var lastUpdated: Date?
+    /// 機場回傳的 subscription-userinfo 原始字串
+    var rawUserInfo: String?
+
+    /// 格式化的流量資訊，例如「已用 12.3 GB / 100 GB · 07/01 到期」
+    var trafficSummary: String? {
+        guard let raw = rawUserInfo else { return nil }
+        var fields: [String: Int64] = [:]
+        for part in raw.split(separator: ";") {
+            let kv = part.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2 else { continue }
+            let key = kv[0].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = Int64(kv[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            fields[key] = value
+        }
+        guard !fields.isEmpty else { return nil }
+        let used = (fields["upload"] ?? 0) + (fields["download"] ?? 0)
+        var pieces: [String] = []
+        if let total = fields["total"], total > 0 {
+            pieces.append("已用 \(used.byteString) / \(total.byteString)")
+        } else if used > 0 {
+            pieces.append("已用 \(used.byteString)")
+        }
+        if let expire = fields["expire"], expire > 0 {
+            let date = Date(timeIntervalSince1970: TimeInterval(expire))
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy/MM/dd"
+            pieces.append("\(fmt.string(from: date)) 到期")
+        }
+        return pieces.isEmpty ? nil : pieces.joined(separator: " · ")
+    }
+}
+
+// MARK: - 代理模式
+
+enum ProxyMode: String, Codable, CaseIterable {
+    case rule
+    case global
+    case direct
+
+    var displayName: String {
+        switch self {
+        case .rule: return "規則"
+        case .global: return "全域"
+        case .direct: return "直連"
+        }
+    }
+
+    /// 對應 sing-box clash_mode 的名稱
+    var clashMode: String {
+        switch self {
+        case .rule: return "Rule"
+        case .global: return "Global"
+        case .direct: return "Direct"
+        }
+    }
+}
+
+// MARK: - 連線狀態
+
+enum ConnectionState: Equatable {
+    case disconnected
+    case connecting
+    case connected
+    case stopping
+
+    var label: String {
+        switch self {
+        case .disconnected: return "未連線"
+        case .connecting: return "連線中…"
+        case .connected: return "已連線"
+        case .stopping: return "正在中斷…"
+        }
+    }
+}
+
+// MARK: - 自訂分流規則
+
+enum RuleType: String, Codable, CaseIterable {
+    case domainSuffix
+    case domainKeyword
+    case domainExact
+    case ipCIDR
+    case geoIP
+    case geosite
+    case processName
+
+    var displayName: String {
+        switch self {
+        case .domainSuffix: return "網域後綴"
+        case .domainKeyword: return "網域關鍵字"
+        case .domainExact: return "完整網域"
+        case .ipCIDR: return "IP 區段"
+        case .geoIP: return "GeoIP 國家"
+        case .geosite: return "Geosite 分類"
+        case .processName: return "程序名稱"
+        }
+    }
+
+    var placeholder: String {
+        switch self {
+        case .domainSuffix: return "example.com"
+        case .domainKeyword: return "google"
+        case .domainExact: return "www.example.com"
+        case .ipCIDR: return "8.8.8.0/24"
+        case .geoIP: return "us"
+        case .geosite: return "netflix"
+        case .processName: return "Telegram"
+        }
+    }
+}
+
+enum RulePolicy: String, Codable, CaseIterable {
+    case proxy
+    case direct
+    case reject
+
+    var displayName: String {
+        switch self {
+        case .proxy: return "代理"
+        case .direct: return "直連"
+        case .reject: return "拒絕"
+        }
+    }
+}
+
+struct UserRule: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var enabled = true
+    var type: RuleType = .domainSuffix
+    /// 比對值，逗號分隔可填多個
+    var value: String = ""
+    var policy: RulePolicy = .proxy
+
+    var values: [String] {
+        value.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+// MARK: - 設定
+
+struct AppSettings: Codable {
+    var mixedPort = 7890
+    var apiPort = 9090
+    var apiSecret = UUID().uuidString
+    var allowLAN = false
+    var autoSystemProxy = true
+    /// TUN 模式：以管理員權限執行引擎，接管全部流量
+    var tunMode = false
+    /// 阻擋廣告（geosite-category-ads-all，所有模式生效）
+    var adBlock = false
+    /// 規則模式下中國大陸網站直連
+    var chinaDirect = true
+    /// 遠端 DNS（代理流量解析用）：IP、https:// DoH 或 tls:// DoT
+    var remoteDNS = "8.8.8.8"
+    /// 直連 DNS：IP、DoH/DoT，或 "local" 使用系統解析
+    var localDNS = "223.5.5.5"
+    /// 訂閱自動更新間隔（小時，0 = 關閉）
+    var subAutoUpdateHours = 0
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
+        case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours
+    }
+
+    // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mixedPort = try c.decodeIfPresent(Int.self, forKey: .mixedPort) ?? 7890
+        apiPort = try c.decodeIfPresent(Int.self, forKey: .apiPort) ?? 9090
+        apiSecret = try c.decodeIfPresent(String.self, forKey: .apiSecret) ?? UUID().uuidString
+        allowLAN = try c.decodeIfPresent(Bool.self, forKey: .allowLAN) ?? false
+        autoSystemProxy = try c.decodeIfPresent(Bool.self, forKey: .autoSystemProxy) ?? true
+        tunMode = try c.decodeIfPresent(Bool.self, forKey: .tunMode) ?? false
+        adBlock = try c.decodeIfPresent(Bool.self, forKey: .adBlock) ?? false
+        chinaDirect = try c.decodeIfPresent(Bool.self, forKey: .chinaDirect) ?? true
+        remoteDNS = try c.decodeIfPresent(String.self, forKey: .remoteDNS) ?? "8.8.8.8"
+        localDNS = try c.decodeIfPresent(String.self, forKey: .localDNS) ?? "223.5.5.5"
+        subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
+    }
+}
+
+// MARK: - 持久化
+
+struct PersistedState: Codable {
+    var nodes: [ProxyNode] = []
+    var subscriptions: [Subscription] = []
+    var settings = AppSettings()
+    var mode: ProxyMode = .rule
+    var selectedNodeID: UUID?
+    var rules: [UserRule] = []
+
+    init(nodes: [ProxyNode] = [],
+         subscriptions: [Subscription] = [],
+         settings: AppSettings = AppSettings(),
+         mode: ProxyMode = .rule,
+         selectedNodeID: UUID? = nil,
+         rules: [UserRule] = []) {
+        self.nodes = nodes
+        self.subscriptions = subscriptions
+        self.settings = settings
+        self.mode = mode
+        self.selectedNodeID = selectedNodeID
+        self.rules = rules
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case nodes, subscriptions, settings, mode, selectedNodeID, rules
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodes = try c.decodeIfPresent([ProxyNode].self, forKey: .nodes) ?? []
+        subscriptions = try c.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
+        settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
+        mode = try c.decodeIfPresent(ProxyMode.self, forKey: .mode) ?? .rule
+        selectedNodeID = try c.decodeIfPresent(UUID.self, forKey: .selectedNodeID)
+        rules = try c.decodeIfPresent([UserRule].self, forKey: .rules) ?? []
+    }
+}
+
+// MARK: - 連線記錄（Clash API /connections）
+
+struct ConnectionInfo: Identifiable, Equatable {
+    var id: String
+    var target: String       // host:port
+    var network: String      // tcp / udp
+    var rule: String         // 命中的規則
+    var chain: String        // 實際出口節點
+    var upload: Int
+    var download: Int
+    var start: Date?
+
+    var durationText: String {
+        guard let start else { return "-" }
+        let secs = Int(Date().timeIntervalSince(start))
+        if secs < 60 { return "\(secs) 秒" }
+        if secs < 3600 { return "\(secs / 60) 分 \(secs % 60) 秒" }
+        return "\(secs / 3600) 時 \(secs % 3600 / 60) 分"
+    }
+}
+
+// MARK: - 小工具
+
+extension Int64 {
+    /// 1234567 -> "1.2 MB"
+    var byteString: String {
+        ByteCountFormatter.string(fromByteCount: self, countStyle: .binary)
+    }
+}
+
+extension Int {
+    var byteString: String { Int64(self).byteString }
+    /// 速率顯示用，例如 "1.2 MB/s"
+    var rateString: String { Int64(self).byteString + "/s" }
+}

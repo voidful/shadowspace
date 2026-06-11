@@ -1,0 +1,194 @@
+import SwiftUI
+
+/// 首頁：大開關 + 模式 + 目前節點 + 流量，一眼看懂、一鍵連線。
+struct HomeView: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                connectButton
+                statusText
+
+                Picker("模式", selection: Binding(
+                    get: { state.mode },
+                    set: { state.setMode($0) }
+                )) {
+                    ForEach(ProxyMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 300)
+
+                if state.nodes.isEmpty {
+                    firstRunCard
+                } else {
+                    nodeCard
+                    if state.connectionState == .connected {
+                        trafficCard
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(28)
+            .frame(maxWidth: .infinity)
+        }
+        .navigationTitle("首頁")
+    }
+
+    // MARK: - 連線大按鈕
+
+    private var connectButton: some View {
+        Button {
+            state.toggleConnection()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(buttonGradient)
+                    .frame(width: 130, height: 130)
+                    .shadow(color: buttonShadow, radius: 16, y: 6)
+                if state.connectionState == .connecting || state.connectionState == .stopping {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "power")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(state.connectionState == .connecting || state.connectionState == .stopping)
+        .animation(.easeInOut(duration: 0.25), value: state.connectionState)
+    }
+
+    private var buttonGradient: LinearGradient {
+        let colors: [Color] = state.connectionState == .connected
+            ? [Color.blue, Color.cyan]
+            : [Color(nsColor: .systemGray), Color(nsColor: .darkGray)]
+        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var buttonShadow: Color {
+        state.connectionState == .connected ? Color.blue.opacity(0.45) : Color.black.opacity(0.18)
+    }
+
+    private var statusText: some View {
+        VStack(spacing: 4) {
+            Text(state.connectionState.label)
+                .font(.title3.weight(.semibold))
+            if state.isInstallingEngine, let status = state.engineInstallStatus {
+                Text("首次連線需要下載核心引擎：\(status)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if state.connectionState == .connected {
+                Text(state.settings.tunMode
+                     ? "TUN 模式已接管全部流量，正透過「\(state.selectedNode?.name ?? "節點")」轉送"
+                     : "系統代理已就緒，流量正透過「\(state.selectedNode?.name ?? "節點")」轉送")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+    }
+
+    // MARK: - 目前節點卡片
+
+    private var nodeCard: some View {
+        GroupBox {
+            HStack(spacing: 10) {
+                if let node = state.selectedNode {
+                    ProtocolBadge(proto: node.proto)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(node.name).fontWeight(.medium).lineLimit(1)
+                        Text("\(node.server):\(String(node.port))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    LatencyBadge(ms: state.latencies[node.id])
+                    Menu("切換") {
+                        ForEach(state.nodes) { candidate in
+                            Button {
+                                state.selectNode(candidate.id)
+                            } label: {
+                                if candidate.id == state.selectedNode?.id {
+                                    Label(candidate.name, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.name)
+                                }
+                            }
+                        }
+                    }
+                    .fixedSize()
+                }
+            }
+            .padding(6)
+        } label: {
+            Text("目前節點").foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 460)
+    }
+
+    // MARK: - 流量卡片
+
+    private var trafficCard: some View {
+        GroupBox {
+            VStack(spacing: 8) {
+                HStack(spacing: 32) {
+                    Label {
+                        Text(state.upRate.rateString).monospacedDigit()
+                    } icon: {
+                        Image(systemName: "arrow.up").foregroundStyle(.orange)
+                    }
+                    Label {
+                        Text(state.downRate.rateString).monospacedDigit()
+                    } icon: {
+                        Image(systemName: "arrow.down").foregroundStyle(.green)
+                    }
+                }
+                .font(.title3)
+                Text("本次共 ↑ \(state.sessionUpTotal.byteString) · ↓ \(state.sessionDownTotal.byteString)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(6)
+            .frame(maxWidth: .infinity)
+        } label: {
+            Text("即時流量").foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 460)
+    }
+
+    // MARK: - 新手引導
+
+    private var firstRunCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("三步驟開始使用", systemImage: "sparkles")
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("1️⃣  複製你的節點分享連結（ss:// vmess:// trojan://…）或機場訂閱網址")
+                    Text("2️⃣  點下方按鈕，自動辨識並匯入")
+                    Text("3️⃣  回到這裡按下大圓鈕，完成連線")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                Button {
+                    Task { await state.importFromClipboard() }
+                } label: {
+                    Label("從剪貼簿匯入", systemImage: "doc.on.clipboard")
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(10)
+        }
+        .frame(maxWidth: 460)
+    }
+}
