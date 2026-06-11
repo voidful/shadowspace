@@ -13,6 +13,10 @@
 
 原生 SwiftUI 打造（選單列 + 主視窗），核心使用 [sing-box](https://github.com/SagerNet/sing-box) 引擎，協議支援度與 Shadowrocket 對齊。
 
+<div align="center">
+<img src="docs/screenshot-main.png" width="560" alt="ShadowSpace 主視窗">
+</div>
+
 ## 下載
 
 到 **[Releases](https://github.com/voidful/shadowspace/releases)** 下載最新的 `.dmg`，拖進「應用程式」即可。已經過 Apple 公證，首次開啟不會跳安全警告。
