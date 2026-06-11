@@ -3,7 +3,7 @@
 # 需先以 notarytool 儲存憑證 profile（一次性，見 PACKAGING.md）：
 #   xcrun notarytool store-credentials ShadowSpaceNotary \
 #       --apple-id you@example.com --team-id TEAMID --password <app-專用密碼>
-set -euo pipefail
+set -eo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET="${1:?用法: notarize.sh <path-to-.app-or-.dmg>}"

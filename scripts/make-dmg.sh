@@ -1,7 +1,7 @@
 #!/bin/bash
 # 把 ShadowSpace.app 打包成可拖曳安裝的壓縮 DMG（內含 /Applications 捷徑）。
 # 帶 SIGN_IDENTITY 時會一併簽署 DMG。
-set -euo pipefail
+set -eo pipefail
 cd "$(dirname "$0")/.."
 
 APP="${1:-build/ShadowSpace.app}"

@@ -3,7 +3,9 @@
 # 預設 ad-hoc（SIGN_IDENTITY=-），僅供本機測試；發佈請帶入 Developer ID Application。
 #
 #   SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" ./scripts/sign.sh
-set -euo pipefail
+# 不用 -u：macOS 內建 bash 3.2 對某些展開會誤判 unbound 而中止；
+# 本腳本所有變數皆有預設值，保留 -e 與 pipefail 即可攔真正的錯誤。
+set -eo pipefail
 cd "$(dirname "$0")/.."
 
 APP="${1:-build/ShadowSpace.app}"
@@ -46,4 +48,5 @@ if [ "$IDENTITY" != "-" ]; then
   echo "→ Gatekeeper 評估（公證前顯示 rejected 屬正常，公證 staple 後才會 accepted）："
   spctl -a -vvv --type execute "$APP" 2>&1 || true
 fi
-echo "✅ 簽署完成（identity: $IDENTITY）"
+echo "✅ 簽署完成 (identity: ${IDENTITY})"
+exit 0
