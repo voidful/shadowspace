@@ -258,12 +258,15 @@ struct AppSettings: Codable {
     var subAutoUpdateHours = 0
     /// 代理引擎：sing-box（完整）或 native（純原生，App Store 相容）
     var engineKind: EngineKind = .native
+    /// 拉取訂閱時的 User-Agent（機場常依此決定回傳格式）
+    var subscriptionUA = "sing-box/1.13.13"
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
+        case subscriptionUA
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -281,6 +284,7 @@ struct AppSettings: Codable {
         localDNS = try c.decodeIfPresent(String.self, forKey: .localDNS) ?? "223.5.5.5"
         subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
         engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .native
+        subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? "sing-box/1.13.13"
     }
 }
 
@@ -357,4 +361,20 @@ extension Int {
     var byteString: String { Int64(self).byteString }
     /// 速率顯示用，例如 "1.2 MB/s"
     var rateString: String { Int64(self).byteString + "/s" }
+    /// 選單列空間有限，使用較短的速率格式，例如 "1.2 MB/s"。
+    var menuBarRateString: String {
+        let bytes = Swift.max(0, self)
+        guard bytes >= 1024 else { return "\(bytes) B/s" }
+
+        let units = ["KB", "MB", "GB", "TB"]
+        var value = Double(bytes) / 1024.0
+        var index = 0
+        while value >= 1024.0 && index < units.count - 1 {
+            value /= 1024.0
+            index += 1
+        }
+
+        let format = value < 10 ? "%.1f %@/s" : "%.0f %@/s"
+        return String(format: format, value, units[index])
+    }
 }

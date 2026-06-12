@@ -521,7 +521,7 @@ final class AppState: ObservableObject {
             }
             return
         }
-        let result = try await SubscriptionManager.fetch(urlString: trimmed)
+        let result = try await SubscriptionManager.fetch(urlString: trimmed, userAgent: settings.subscriptionUA)
         var sub = Subscription(name: result.suggestedName ?? "訂閱", url: trimmed)
         sub.lastUpdated = Date()
         sub.rawUserInfo = result.userInfo
@@ -537,7 +537,7 @@ final class AppState: ObservableObject {
     func refreshSubscription(_ id: UUID, quiet: Bool = false) async {
         guard let index = subscriptions.firstIndex(where: { $0.id == id }) else { return }
         do {
-            let result = try await SubscriptionManager.fetch(urlString: subscriptions[index].url)
+            let result = try await SubscriptionManager.fetch(urlString: subscriptions[index].url, userAgent: settings.subscriptionUA)
             let oldSelectedName = selectedNode?.name
             nodes.removeAll { $0.subscriptionID == id }
             for var node in result.nodes {

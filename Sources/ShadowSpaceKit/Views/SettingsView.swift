@@ -145,7 +145,7 @@ struct SettingsView: View {
 #endif
             }
 
-            Section("訂閱") {
+            Section {
                 Picker("自動更新", selection: Binding(
                     get: { state.settings.subAutoUpdateHours },
                     set: { state.settings.subAutoUpdateHours = $0; state.save() }
@@ -155,6 +155,28 @@ struct SettingsView: View {
                     Text("每 12 小時").tag(12)
                     Text("每 24 小時").tag(24)
                 }
+                LabeledContent("拉取 User-Agent") {
+                    HStack {
+                        TextField("", text: Binding(
+                            get: { state.settings.subscriptionUA },
+                            set: { state.settings.subscriptionUA = $0; state.save() }
+                        ))
+                        .frame(maxWidth: 200)
+                        .multilineTextAlignment(.trailing)
+                        Menu("常用") {
+                            Button("sing-box") { state.settings.subscriptionUA = "sing-box/1.13.13"; state.save() }
+                            Button("Shadowrocket") { state.settings.subscriptionUA = "Shadowrocket/2.2.65"; state.save() }
+                            Button("clash.meta") { state.settings.subscriptionUA = "clash.meta"; state.save() }
+                            Button("v2rayN") { state.settings.subscriptionUA = "v2rayN/6.45"; state.save() }
+                        }
+                        .fixedSize()
+                    }
+                }
+            } header: {
+                Text("訂閱")
+            } footer: {
+                Text("機場常依 User-Agent 回傳不同格式。送 sing-box 會拿到完整設定（含 VLESS、WS/Reality 等）；改 UA 後到「節點」分頁重新整理訂閱即生效。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
 #if !APP_STORE

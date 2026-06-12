@@ -12,7 +12,7 @@ enum SubscriptionManager {
             switch self {
             case .badURL: return "訂閱連結格式不正確"
             case .fetchFailed(let msg): return "訂閱下載失敗：\(msg)"
-            case .noNodes: return "訂閱內容解析不到任何節點（目前支援 base64 節點清單格式，Clash YAML 訂閱還在開發中）"
+            case .noNodes: return "訂閱內容解析不到任何節點（支援 base64 分享連結與 sing-box JSON；Clash YAML 還在開發中）。可到「設定 → 訂閱」調整 User-Agent 再試。"
             }
         }
     }
@@ -23,14 +23,14 @@ enum SubscriptionManager {
         var suggestedName: String?
     }
 
-    static func fetch(urlString: String) async throws -> FetchResult {
+    static func fetch(urlString: String, userAgent: String = "sing-box/1.13.13") async throws -> FetchResult {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = url.scheme, ["http", "https"].contains(scheme.lowercased()) else {
             throw SubError.badURL
         }
         var req = URLRequest(url: url)
-        // 多數機場依 User-Agent 決定回傳格式；Shadowrocket UA 會拿到 base64 節點清單
-        req.setValue("Shadowrocket/2.2.65", forHTTPHeaderField: "User-Agent")
+        // 機場常依 User-Agent 決定回傳格式（base64 分享連結 / sing-box JSON / Clash YAML）
+        req.setValue(userAgent.isEmpty ? "sing-box/1.13.13" : userAgent, forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 20
 
         let data: Data
@@ -50,7 +50,14 @@ enum SubscriptionManager {
             throw SubError.fetchFailed("回應內容無法解碼")
         }
 
-        let nodes = URIParser.parseMultiple(text)
+        // sing-box JSON config（送 sing-box UA 時機場常回此格式）優先，否則 base64 / 分享連結
+        let nodes: [ProxyNode]
+        if SingBoxNodeParser.looksLikeConfig(text) {
+            let parsed = SingBoxNodeParser.parse(data)
+            nodes = parsed.isEmpty ? URIParser.parseMultiple(text) : parsed
+        } else {
+            nodes = URIParser.parseMultiple(text)
+        }
         guard !nodes.isEmpty else { throw SubError.noNodes }
 
         let userInfo = http.value(forHTTPHeaderField: "subscription-userinfo")
