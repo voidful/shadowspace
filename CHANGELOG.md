@@ -2,6 +2,16 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.2.1
+
+### 新增
+- App Store 版本補上 NetworkExtension UDP flow 與 DNS 分流處理，並加入可重複產生與 preflight 的 Xcode project。
+- ShadowCore 新增 datagram session 介面，Direct outbound 可做 UDP 直連，為透明代理 DNS / UDP 路徑鋪路。
+
+### 改進
+- App Store 路線改用共享設定目錄與 tunnel payload 啟動流程，避免混入直發版 sing-box / 系統代理流程。
+- 設定頁版本改讀取 bundle metadata，之後發版不需同步硬編碼版本字串。
+
 ## v0.2.0
 
 功能對齊 Shadowrocket 核心能力，維持簡潔的分頁式介面。

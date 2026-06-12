@@ -21,6 +21,16 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+#if APP_STORE
+            Section {
+                LabeledContent("代理引擎", value: "原生 NetworkExtension")
+            } header: {
+                Text("引擎")
+            } footer: {
+                Text("App Store 版使用 Apple NetworkExtension 透明代理，不包含 sing-box 子程序、TUN 管理員授權或系統代理改寫。支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+#else
             Section {
                 Picker("代理引擎", selection: Binding(
                     get: { state.settings.engineKind },
@@ -42,8 +52,10 @@ struct SettingsView: View {
                 Text("原生引擎純 Apple 框架、可上 App Store，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整（Developer ID 發佈版）。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+#endif
 
             Section {
+#if !APP_STORE
                 if state.settings.engineKind == .singbox {
                     Toggle(isOn: Binding(
                         get: { state.settings.tunMode },
@@ -62,6 +74,7 @@ struct SettingsView: View {
                         set: { state.settings.autoSystemProxy = $0; state.save() }
                     ))
                 }
+#endif
                 Toggle("登入時啟動", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         toggleLaunchAtLogin(enabled)
@@ -92,13 +105,19 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent("代理連接埠（HTTP/SOCKS 共用）") {
+#if APP_STORE
+                    Text("由系統管理")
+                        .foregroundStyle(.secondary)
+#else
                     TextField("", value: Binding(
                         get: { state.settings.mixedPort },
                         set: { state.settings.mixedPort = $0; state.save() }
                     ), format: .number.grouping(.never))
                     .frame(width: 80)
                     .multilineTextAlignment(.trailing)
+#endif
                 }
+#if !APP_STORE
                 LabeledContent("控制 API 連接埠") {
                     TextField("", value: Binding(
                         get: { state.settings.apiPort },
@@ -109,14 +128,21 @@ struct SettingsView: View {
                 }
                 Toggle("允許區域網路連入", isOn: Binding(
                     get: { state.settings.allowLAN },
-                    set: { state.settings.allowLAN = $0; state.save() }
+                        set: { state.settings.allowLAN = $0; state.save() }
                 ))
+#endif
             } header: {
                 Text("網路")
             } footer: {
+#if APP_STORE
+                Text("透明代理由 NetworkExtension 管理，不開本機 HTTP/SOCKS 監聽埠。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+#else
                 Text("連線中修改連接埠，需重新連線後生效。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+#endif
             }
 
             Section("訂閱") {
@@ -131,6 +157,7 @@ struct SettingsView: View {
                 }
             }
 
+#if !APP_STORE
             Section("核心引擎") {
                 LabeledContent("sing-box 版本") {
                     Text(state.engineVersion ?? "尚未安裝")
@@ -149,15 +176,28 @@ struct SettingsView: View {
                     }
                 }
                 Button("開啟設定資料夾") {
-                    NSWorkspace.shared.open(EngineManager.supportDir)
+                    NSWorkspace.shared.open(AppState.supportDir)
                 }
             }
+#else
+            Section("資料") {
+                Button("開啟設定資料夾") {
+                    NSWorkspace.shared.open(AppState.supportDir)
+                }
+            }
+#endif
 
             Section("關於") {
-                LabeledContent("ShadowSpace", value: "0.2.0")
+                LabeledContent("ShadowSpace", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知版本")
+#if APP_STORE
+                Text("App Store 版使用原生代理核心與 NetworkExtension，不包含外部代理核心或管理員授權流程。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+#else
                 Text("核心引擎使用開源專案 sing-box（GPLv3），以獨立子程序方式執行。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+#endif
             }
         }
         .formStyle(.grouped)

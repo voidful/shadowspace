@@ -3,6 +3,8 @@ build/
 vendor/
 .DS_Store
 *.xcodeproj
+!AppStore/ShadowSpace.xcodeproj/
+!AppStore/ShadowSpace.xcodeproj/**
 .swiftpm/
 .idea/
 .claude/

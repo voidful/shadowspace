@@ -62,13 +62,13 @@ make release SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)"
 4. 打包並簽署 `ShadowSpace-<版本>.dmg`
 5. 公證 DMG 並 staple
 
-完成後得到 `build/ShadowSpace-0.2.0.dmg`，可直接散佈。
+完成後得到 `build/ShadowSpace-0.2.1.dmg`，可直接散佈。
 
 ### 驗證成品
 
 ```bash
 spctl -a -vvv --type execute build/ShadowSpace.app   # 應顯示 accepted / Notarized Developer ID
-xcrun stapler validate build/ShadowSpace-0.2.0.dmg   # 應顯示 The validate action worked
+xcrun stapler validate build/ShadowSpace-0.2.1.dmg   # 應顯示 The validate action worked
 ```
 
 ---

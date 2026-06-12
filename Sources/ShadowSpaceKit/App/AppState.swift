@@ -31,26 +31,34 @@ final class AppState: ObservableObject {
     @Published var connDownloadTotal = 0
 
     @Published var engineLog: [String] = []
+#if APP_STORE
+    @Published var engineVersion: String? = nil
+#else
     @Published var engineVersion: String? = EngineManager.version()
+#endif
     @Published var engineInstallStatus: String?   // 下載引擎時的進度文字
     @Published var isInstallingEngine = false
 
     @Published var errorMessage: String?          // 跳 alert 用
     @Published var toastMessage: String?          // 輕量回饋（匯入成功等）
 
+#if !APP_STORE
     private let engine = EngineManager()
     private var nativeEngine: NativeEngine?
     private var nativeLastUp = 0
     private var nativeLastDown = 0
+#endif
     private var trafficTask: Task<Void, Never>?
     private var connectionsTask: Task<Void, Never>?
     private var autoUpdateTimer: Timer?
+#if !APP_STORE
     private var tagByNodeID: [UUID: String] = [:]
     private var systemProxyActive = false
 
     private var api: ClashAPIClient {
         ClashAPIClient(port: settings.apiPort, secret: settings.apiSecret)
     }
+#endif
 
     var selectedNode: ProxyNode? {
         nodes.first { $0.id == selectedNodeID } ?? nodes.first
@@ -58,8 +66,19 @@ final class AppState: ObservableObject {
 
     // MARK: - 初始化與持久化
 
+    static var supportDir: URL {
+#if APP_STORE
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("ShadowSpace", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+#else
+        return EngineManager.supportDir
+#endif
+    }
+
     private static var stateURL: URL {
-        EngineManager.supportDir.appendingPathComponent("state.json")
+        supportDir.appendingPathComponent("state.json")
     }
 
     init() {
@@ -72,6 +91,7 @@ final class AppState: ObservableObject {
             mode = persisted.mode
             selectedNodeID = persisted.selectedNodeID
         }
+#if !APP_STORE
         engine.onLog = { [weak self] line in
             Task { @MainActor in self?.appendLog(line) }
         }
@@ -82,6 +102,7 @@ final class AppState: ObservableObject {
                 self.errorMessage = "引擎意外停止（代碼 \(status)）。可到「日誌」分頁查看原因。"
             }
         }
+#endif
         // 訂閱自動更新：啟動後與每 30 分鐘檢查一次是否到期
         autoUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { _ in
             Task { @MainActor in await AppState.shared.autoRefreshIfDue() }
@@ -108,6 +129,12 @@ final class AppState: ObservableObject {
     func saveAndApply() {
         save()
         guard connectionState == .connected else { return }
+#if APP_STORE
+        Task {
+            await disconnect()
+            await connect()
+        }
+#else
         if settings.tunMode {
             toastMessage = "已儲存，重新連線後生效"
         } else {
@@ -116,6 +143,7 @@ final class AppState: ObservableObject {
                 await connect()
             }
         }
+#endif
     }
 
     private func appendLog(_ line: String) {
@@ -146,6 +174,10 @@ final class AppState: ObservableObject {
         }
         connectionState = .connecting
 
+#if APP_STORE
+        await connectAppStoreTunnel()
+        return
+#else
         if settings.engineKind == .native {
             await connectNative()
             return
@@ -208,9 +240,35 @@ final class AppState: ObservableObject {
             connectionState = .disconnected
             errorMessage = error.localizedDescription
         }
+#endif
     }
 
     // MARK: - 原生引擎（App Store 路線）
+
+#if APP_STORE
+    private func connectAppStoreTunnel() async {
+        guard let node = selectedNode else {
+            connectionState = .disconnected
+            errorMessage = "找不到可用節點"
+            return
+        }
+        do {
+            _ = try NativeEngineAdapter.outbound(for: node)
+            let payload = try SharedConfig.makePayload(node: node, rules: rules,
+                                                       mode: mode, settings: settings)
+            try await TunnelManager.start(payload: payload)
+
+            sessionUpTotal = 0; sessionDownTotal = 0
+            upRate = 0; downRate = 0
+            engineLog = ["[App Store] 透明代理已啟動，出站「\(node.name)」（\(node.proto.displayName)）"]
+            connectionState = .connected
+            save()
+        } catch {
+            connectionState = .disconnected
+            errorMessage = error.localizedDescription
+        }
+    }
+#else
 
     private func connectNative() async {
         guard let node = selectedNode else {
@@ -245,7 +303,9 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
         }
     }
+#endif
 
+#if !APP_STORE
     private func startNativeTrafficPolling() {
         trafficTask?.cancel()
         trafficTask = Task { [weak self] in
@@ -265,16 +325,25 @@ final class AppState: ObservableObject {
         nativeLastUp = up; nativeLastDown = down
         sessionUpTotal = up; sessionDownTotal = down
     }
+#endif
 
     func disconnect() async {
         guard connectionState == .connected else { return }
         connectionState = .stopping
+#if APP_STORE
+        do {
+            try await TunnelManager.stop()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+#endif
         teardownAfterStop()
     }
 
     private func teardownAfterStop() {
         trafficTask?.cancel()
         trafficTask = nil
+#if !APP_STORE
         if systemProxyActive {
             SystemProxyManager.disable()
             systemProxyActive = false
@@ -282,6 +351,7 @@ final class AppState: ObservableObject {
         engine.stop()
         nativeEngine?.stop()
         nativeEngine = nil
+#endif
         upRate = 0
         downRate = 0
         connections = []
@@ -290,14 +360,17 @@ final class AppState: ObservableObject {
 
     /// App 結束前的同步清理：還原系統代理、停掉引擎
     func cleanupOnTerminate() {
+#if !APP_STORE
         if systemProxyActive {
             SystemProxyManager.disable()
         }
         engine.stop()
         nativeEngine?.stop()
+#endif
         save()
     }
 
+#if !APP_STORE
     private func startTrafficStream() {
         trafficTask?.cancel()
         let client = api
@@ -321,6 +394,7 @@ final class AppState: ObservableObject {
             }
         }
     }
+#endif
 
     // MARK: - 模式 / 節點切換
 
@@ -328,18 +402,25 @@ final class AppState: ObservableObject {
         mode = newMode
         save()
         guard connectionState == .connected else { return }
+#if APP_STORE
+        Task { await disconnect(); await connect() }
+#else
         if settings.engineKind == .native {
             Task { await disconnect(); await connect() }
             return
         }
         let client = api
         Task { await client.setMode(newMode.clashMode) }
+#endif
     }
 
     func selectNode(_ id: UUID) {
         selectedNodeID = id
         save()
         guard connectionState == .connected else { return }
+#if APP_STORE
+        Task { await disconnect(); await connect() }
+#else
         if settings.engineKind == .native {
             Task { await disconnect(); await connect() }
             return
@@ -355,6 +436,7 @@ final class AppState: ObservableObject {
                 }
             }
         }
+#endif
     }
 
     // MARK: - 匯入
@@ -552,6 +634,15 @@ final class AppState: ObservableObject {
         isPinging = true
         defer { isPinging = false }
 
+#if APP_STORE
+        let targets = nodes.map { (id: $0.id, host: $0.server, port: $0.port) }
+        await TCPPing.pingAll(targets) { [weak self] id, ms in
+            guard let self else { return }
+            await MainActor.run {
+                self.latencies[id] = ms ?? -1
+            }
+        }
+#else
         if connectionState == .connected {
             let client = api
             let targets = nodes.compactMap { node in
@@ -583,11 +674,17 @@ final class AppState: ObservableObject {
                 }
             }
         }
+#endif
     }
 
     // MARK: - 連線檢視
 
     func startConnectionsPolling() {
+#if APP_STORE
+        connections = []
+        connUploadTotal = 0
+        connDownloadTotal = 0
+#else
         guard connectionsTask == nil else { return }
         connectionsTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -603,6 +700,7 @@ final class AppState: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
+#endif
     }
 
     func stopConnectionsPolling() {
@@ -611,18 +709,25 @@ final class AppState: ObservableObject {
     }
 
     func closeConnection(_ id: String) {
+#if !APP_STORE
         let client = api
         Task { await client.closeConnection(id) }
+#endif
     }
 
     func closeAllConnections() {
+#if !APP_STORE
         let client = api
         Task { await client.closeAllConnections() }
+#endif
     }
 
     // MARK: - 引擎安裝
 
     func installOrUpdateEngine() async {
+#if APP_STORE
+        toastMessage = "App Store 版使用系統 NetworkExtension，不需要安裝外部核心"
+#else
         guard !isInstallingEngine else { return }
         isInstallingEngine = true
         defer { isInstallingEngine = false }
@@ -637,5 +742,6 @@ final class AppState: ObservableObject {
             engineInstallStatus = nil
             errorMessage = error.localizedDescription
         }
+#endif
     }
 }

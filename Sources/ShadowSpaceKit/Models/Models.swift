@@ -227,8 +227,8 @@ struct UserRule: Codable, Identifiable, Hashable {
 // MARK: - 設定
 
 enum EngineKind: String, Codable, CaseIterable {
-    case singbox
     case native
+    case singbox
 
     var displayName: String {
         switch self {
@@ -257,7 +257,7 @@ struct AppSettings: Codable {
     /// 訂閱自動更新間隔（小時，0 = 關閉）
     var subAutoUpdateHours = 0
     /// 代理引擎：sing-box（完整）或 native（純原生，App Store 相容）
-    var engineKind: EngineKind = .singbox
+    var engineKind: EngineKind = .native
 
     init() {}
 
@@ -280,7 +280,7 @@ struct AppSettings: Codable {
         remoteDNS = try c.decodeIfPresent(String.self, forKey: .remoteDNS) ?? "8.8.8.8"
         localDNS = try c.decodeIfPresent(String.self, forKey: .localDNS) ?? "223.5.5.5"
         subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
-        engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .singbox
+        engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .native
     }
 }
 

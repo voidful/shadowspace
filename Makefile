@@ -9,7 +9,7 @@ SIGN_IDENTITY ?= -
 NOTARY_PROFILE ?= ShadowSpaceNotary
 VERSION = $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
 
-.PHONY: all setup build app sign run dev test engine dmg notarize release clean
+.PHONY: all setup build app sign run dev test engine dmg notarize release appstore-project appstore-preflight clean
 
 all: app
 
@@ -83,6 +83,14 @@ release:
 	NOTARY_PROFILE='$(NOTARY_PROFILE)' ./scripts/notarize.sh $(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg
 	@echo ""
 	@echo "🎉 發佈完成：$(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg"
+
+## 產生 Mac App Store 專用 Xcode 工程（App + Network Extension）
+appstore-project:
+	ruby scripts/generate-appstore-xcodeproj.rb
+
+## Mac App Store preflight：產生工程、檢查 plist、做不簽章 Release build
+appstore-preflight:
+	./scripts/appstore-preflight.sh
 
 clean:
 	rm -rf .build $(BUILD_DIR)

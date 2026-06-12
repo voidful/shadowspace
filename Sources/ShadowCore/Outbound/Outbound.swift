@@ -7,4 +7,11 @@ import Network
 public protocol Outbound: Sendable {
     var name: String { get }
     func connect(to target: Target, queue: DispatchQueue) async throws -> ByteStream
+    func openDatagramSession(to target: Target, queue: DispatchQueue) async throws -> DatagramSession
+}
+
+public extension Outbound {
+    func openDatagramSession(to target: Target, queue: DispatchQueue) async throws -> DatagramSession {
+        throw ProxyError.unsupported("\(name) 不支援 UDP 出站：\(target.host):\(target.port)")
+    }
 }

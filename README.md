@@ -1,9 +1,9 @@
 <div align="center">
 <img src="Resources/AppIcon.png" width="128" alt="ShadowSpace">
 
-# ShadowSpace ✈️
+# ShadowSpace
 
-**Shadowrocket 風格的 macOS 代理工具——介面簡單、功能豐富、對新手友善**
+**台灣用語友善的 macOS 代理工具：選單列常駐、SwiftUI 介面、支援原生與完整引擎雙路線**
 
 ![platform](https://img.shields.io/badge/macOS-14%2B-blue)
 ![license](https://img.shields.io/badge/license-GPL--3.0-green)
@@ -11,7 +11,12 @@
 
 </div>
 
-原生 SwiftUI 打造（選單列 + 主視窗），核心使用 [sing-box](https://github.com/SagerNet/sing-box) 引擎，協議支援度與 Shadowrocket 對齊。
+ShadowSpace 是一款 Shadowrocket 風格的 macOS 代理工具。它保留簡單的一鍵連線體驗，同時把發佈路線拆清楚：
+
+| 路線 | 用途 | 引擎 | 狀態 |
+|---|---|---|---|
+| Developer ID 直發版 | 給需要完整協議、TUN、系統代理控制的使用者 | `sing-box（完整）`，也可切換 `原生` | 以公證 DMG 發佈 |
+| Mac App Store 版 | 給沙箱環境與審查相容的透明代理版本 | `ShadowCore` + `NetworkExtension` | 已有 Xcode project 產生與 preflight 流程 |
 
 <div align="center">
 <img src="docs/screenshot-main.png" width="560" alt="ShadowSpace 主視窗">
@@ -19,124 +24,181 @@
 
 ## 下載
 
-到 **[Releases](https://github.com/voidful/shadowspace/releases)** 下載最新的 `.dmg`，拖進「應用程式」即可。已經過 Apple 公證，首次開啟不會跳安全警告。
+到 **[Releases](https://github.com/voidful/shadowspace/releases)** 下載最新 `.dmg`，拖進「應用程式」即可。直發版使用 Developer ID 簽章與 Apple 公證，第一次開啟應可通過 Gatekeeper。
 
-> 想自行從原始碼建置？見下方[快速開始](#快速開始)。
+Mac App Store 路線在 [AppStore/](AppStore/) 內，使用 Apple `NetworkExtension` 透明代理架構，不包含 `sing-box`、`networksetup`、TUN 管理員授權或外部核心下載。送審與 metadata 請看 [AppStore/APP_STORE_SUBMISSION.md](AppStore/APP_STORE_SUBMISSION.md)。
 
 ## 功能
 
-- **一鍵連線**：首頁大圓鈕，連線時自動設定系統代理、中斷時自動還原
-- **TUN／增強模式**：建立虛擬網卡接管「全部」流量（含終端機與不吃系統代理的 App），
-  如同 Shadowrocket 的 VPN 模式；連線時輸入一次管理員密碼即可
-- **三種模式**：規則（中國大陸網站直連、其餘走代理）／全域／直連，連線中可熱切換、不需重啟
-- **協議支援**：Shadowsocks、VMess、VLESS（含 Reality）、Trojan、Hysteria2、TUIC、SOCKS5、WireGuard
-- **分流規則編輯器**：網域後綴／關鍵字／IP 區段／GeoIP／Geosite／程序名稱，
-  策略可選代理、直連、拒絕，拖曳排序；內建**一鍵廣告阻擋**
-- **連線檢視器**：即時顯示每條連線的目標、命中規則、出口節點與流量，可強制中斷
-- **匯入超簡單**：複製分享連結後點「從剪貼簿匯入」，自動辨識節點連結與訂閱網址
-- **節點管理**：手動新增／編輯表單、複製分享連結、QR Code 匯出（給手機掃）
-- **訂閱管理**：機場 base64 訂閱、剩餘流量與到期日、一鍵更新、定時自動更新
-- **延遲測試**：未連線時 TCP 測試、連線中走引擎做真實 URL 測試，綠橘紅燈號顯示
-- **DNS 自訂**：遠端／直連 DNS 分流，支援 DoH 與 DoT，避免 DNS 污染
-- **即時流量**：上下行速率與本次連線總量（首頁 + 選單列）
-- **自動裝引擎**：第一次連線自動下載 sing-box 官方核心，不用碰終端機
-- **選單列常駐**：關掉視窗也能從 ✈️ 圖示快速開關、切模式、換節點
+### 共用體驗
+
+- 一鍵連線：首頁大圓鈕，連線與中斷狀態清楚
+- 三種模式：規則、全域、直連
+- 匯入分享連結與訂閱：支援常見節點 URI、base64 訂閱與剪貼簿匯入
+- 節點管理：手動新增、編輯、複製分享連結、QR Code 匯出
+- 分流規則：網域後綴、網域關鍵字、完整網域、IP CIDR，策略可選代理、直連、拒絕
+- 訂閱管理：剩餘流量、到期日、一鍵更新、定時自動更新
+- 選單列常駐：快速連線、切換模式、切換節點、查看流量
+- 本機資料：設定與節點存在 `~/Library/Application Support/ShadowSpace/`
+
+### 原生引擎 / App Store 路線
+
+- 使用純 Apple 框架實作的 `ShadowCore`，不依賴外部代理核心
+- 支援 Shadowsocks、Trojan、VLESS、SOCKS5
+- 支援 TCP、TLS、WebSocket / WSS
+- App Store build 使用 `NETransparentProxyProvider`，以透明代理方式接流量
+- App Store extension 已補 UDP flow 與 DNS 分流骨架；DNS 可依 Router policy 走 direct / proxy / reject
+- 不支援 Reality、VMess、Hysteria2、TUIC、WireGuard、TUN、GeoIP / Geosite 與 DoH / DoT 分流
+
+更多原生核心細節見 [Sources/ShadowCore/README.md](Sources/ShadowCore/README.md)。
+
+### sing-box 完整引擎 / Developer ID 路線
+
+- 支援 Shadowsocks、VMess、VLESS（含 Reality）、Trojan、Hysteria2、TUIC、SOCKS5、WireGuard
+- 支援 TUN / 增強模式，可接管終端機、Docker 等不吃系統代理的流量
+- 可自動設定系統代理，也可手動指向 `127.0.0.1:7890`
+- 支援 GeoIP / Geosite、程序名稱規則、一鍵廣告阻擋
+- 支援遠端 / 直連 DNS 分流，包含 DoH 與 DoT
+- 第一次連線可自動下載官方 `sing-box` 核心；發佈版建議先內嵌核心
 
 ## 系統需求
 
-- macOS 14（Sonoma）以上
-- 編譯需要 Xcode（或 Command Line Tools）
+- macOS 14 Sonoma 以上
+- 編譯需要 Xcode 或 Command Line Tools
+- App Store 版實機測試需要 Apple 核准的 Network Extensions capability 與 App Group 佈建描述檔
 
 ## 快速開始
 
 ```bash
-make setup   # 下載 sing-box 核心 + 編譯 + 打包
-make run     # 啟動 ShadowSpace
+make setup
+make run
 ```
 
-> 跳過引擎下載也可以：直接 `make run`，App 會在第一次連線時自動下載核心。
+`make setup` 會下載 `sing-box` 核心、編譯並打包 `.app`。如果只想跑開發版：
 
-### 新手三步驟
+```bash
+make dev
+```
 
-1. 複製你的節點分享連結（`ss://`、`vmess://`、`trojan://`…）或機場訂閱網址
-2. 開啟 ShadowSpace，點「**從剪貼簿匯入**」
-3. 回到首頁按下**大圓鈕**，完成 🎉
+第一次使用：
 
-連線後系統代理會自動指向本機（預設連接埠 7890），瀏覽器與多數 App 立即生效。
+1. 複製你的節點分享連結或訂閱網址。
+2. 開啟 ShadowSpace，點「從剪貼簿匯入」。
+3. 回首頁選節點與模式，按下連線按鈕。
+
+Developer ID 直發版可在「設定」切換代理引擎：
+
+- `原生（App Store）`：預設路線，純 Swift / Apple framework，適合 SS / Trojan / VLESS / SOCKS5。
+- `sing-box（完整）`：完整協議與 TUN 能力，適合需要 Reality、Hysteria2、TUIC、WireGuard 或 GeoIP / Geosite 的使用者。
+
+## App Store Build
+
+SwiftPM 無法直接產生 `.appex`，所以 App Store 版使用 repo 內的產生器建立 Xcode 工程：
+
+```bash
+make appstore-project
+make appstore-preflight
+```
+
+`make appstore-preflight` 會產生 `AppStore/ShadowSpace.xcodeproj`、檢查 plist / entitlement / privacy manifest、做不簽章 Release build，並確認主 App 內有 `ShadowTunnel.appex` 且不含 `sing-box`。
+
+App Store 版的完整說明在 [AppStore/README.md](AppStore/README.md)。
 
 ## 常見問題
 
-**第一次連線很慢？**
-首次連線會下載核心引擎與分流規則檔（geosite/geoip），之後就快了。
+**直發版和 App Store 版差在哪？**  
+直發版可使用完整 `sing-box` 能力，包含 TUN、系統代理設定與更多協議；App Store 版必須符合沙箱與審查規則，因此改用 `NetworkExtension` 和原生核心，功能範圍較保守。
 
-**設定系統代理失敗？**
-修改網路設定需要管理員帳號。也可以關掉「自動設定系統代理」，
-手動把應用程式的代理指到 `127.0.0.1:7890`（HTTP 與 SOCKS5 共用）。
+**第一次連線很慢？**  
+使用 `sing-box（完整）` 時，首次連線可能會下載核心引擎與分流規則檔；之後就會快很多。發佈版建議用 `make engine` 先內嵌核心。
 
-**訂閱匯入失敗？**
-目前支援 base64 節點清單格式（Shadowrocket / V2Ray 通用格式）。
-Clash YAML 專用訂閱還在開發中，可先請機場提供通用訂閱連結。
+**設定系統代理失敗？**  
+修改網路設定需要管理員帳號。也可以關掉「連線時自動設定系統代理」，手動把 HTTP / SOCKS 代理指到 `127.0.0.1:7890`。App Store 版不使用這條路徑，而是由 NetworkExtension 接管。
 
-**和 Shadowrocket 一樣有 VPN（TUN）模式嗎？**
-有。到「設定」開啟「TUN 模式（增強模式）」，連線時輸入一次管理員密碼，
-之後中斷連線、關閉 App 都不用再輸入（背後用哨兵檔案＋看門狗機制管理 root 引擎，
-App 就算閃退也不會留下殘留程序）。一般情況下系統代理模式就涵蓋瀏覽器與多數 App，
-需要讓終端機、Docker 等也走代理時再開 TUN。
+**和 Shadowrocket 一樣有 VPN / TUN 模式嗎？**  
+Developer ID 直發版的 `sing-box（完整）` 引擎支援 TUN / 增強模式。App Store 版使用 App Proxy Provider 透明代理，不包含 TUN 管理員模式。
+
+**訂閱匯入失敗？**  
+目前支援 base64 節點清單格式。Clash YAML 專用訂閱仍待補，可先請服務提供者給 Shadowrocket / V2Ray 通用訂閱連結。
 
 ## 專案結構
 
-```
-Sources/
-├── ShadowSpace/          # 進入點
-└── ShadowSpaceKit/
-    ├── App/              # AppState（狀態中樞）、App 生命週期
-    ├── Core/             # URI 解析、設定檔產生、引擎管理、系統代理、延遲測試
-    ├── Models/           # 節點 / 訂閱 / 設定資料模型
-    └── Views/            # 首頁、節點、設定、日誌、選單列
-```
+```text
+AppStore/
+├── README.md                         # App Store / NetworkExtension 路線說明
+├── APP_STORE_SUBMISSION.md           # App Store Connect metadata 與送審檢查
+├── ShadowTunnel/                     # NETransparentProxyProvider extension
+└── ShadowSpace.xcodeproj/            # 由產生器建立的 App Store Xcode project
 
-架構：GUI 以子程序方式啟動 sing-box，透過 Clash API（`127.0.0.1:9090`）做
-節點切換、模式熱切換與流量串流。設定與狀態存於
-`~/Library/Application Support/ShadowSpace/`。
+Sources/
+├── ShadowCore/                       # 純 Apple framework 原生代理核心
+├── ShadowSpace/                      # App 進入點
+├── ShadowSpaceKit/                   # SwiftUI UI、AppState、設定與引擎橋接
+└── shadow-demo/                      # ShadowCore smoke test executable
+
+Tests/
+├── ShadowCoreTests/
+└── ShadowSpaceKitTests/
+
+scripts/
+├── fetch-singbox.sh
+├── generate-appstore-xcodeproj.rb
+├── appstore-preflight.sh
+├── sign.sh
+├── make-dmg.sh
+└── notarize.sh
+```
 
 ## 開發
 
 ```bash
-swift test    # 單元測試（URI 解析、設定檔產生）
-make dev      # 開發模式直接執行（不打包）
-make app      # 打包 build/ShadowSpace.app
+swift test
+make dev
+make app
+make engine
 ```
+
+常用命令：
+
+- `swift test`：單元測試
+- `make dev`：直接執行開發版
+- `make app`：打包 `build/ShadowSpace.app`
+- `make engine`：下載並內嵌 `sing-box`
+- `make appstore-preflight`：驗證 App Store project 可產生、可建置、可嵌入 extension
 
 ## 發佈
 
-以 **Developer ID 簽章 + Apple 公證 + DMG** 對外散佈（不走 App Store——沙箱會封鎖
-sing-box 子程序、系統代理與 TUN，且 GPLv3 與 App Store 條款不相容）。完整步驟見
-[PACKAGING.md](PACKAGING.md)，簡述：
+直發版使用 **Developer ID 簽章 + Apple 公證 + DMG**。完整步驟見 [PACKAGING.md](PACKAGING.md)。
 
 ```bash
-make engine                                                   # 內嵌核心
+make engine
 make release SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)"
 ```
 
-會自動完成簽章 → 公證 `.app` → 打包 → 公證 DMG，產出 `build/ShadowSpace-<版本>.dmg`。
-不帶 `SIGN_IDENTITY` 時為 ad-hoc 簽章，僅供本機測試。
+完成後會產出 `build/ShadowSpace-<版本>.dmg`。不帶 `SIGN_IDENTITY` 時會使用 ad-hoc 簽章，僅適合本機測試，不能拿來對外發佈。
 
 ## 路線圖
 
-- [x] TUN／VPN 模式（全域接管）
-- [x] 規則編輯器（自訂網域 / IP / GeoIP / 程序分流規則）＋廣告阻擋
+- [x] 原生 ShadowCore 引擎
+- [x] sing-box 完整引擎
+- [x] TUN / 增強模式
+- [x] 規則編輯器與一鍵廣告阻擋
 - [x] 連線檢視器
-- [x] 節點手動編輯表單、分享連結與 QR Code 匯出
-- [x] DNS 自訂（DoH / DoT）與訂閱自動更新
-- [x] App 圖示
-- [x] 選單列 VPN 狀態顯示
+- [x] 節點編輯、分享連結與 QR Code 匯出
+- [x] DNS 自訂與訂閱自動更新
+- [x] App Store NetworkExtension project 產生器
+- [x] App Store preflight build
+- [x] App Store UDP flow / DNS relay 骨架
+- [ ] App Store 已核准 entitlement 的實機透明代理測試
 - [ ] Clash YAML 訂閱格式
-- [ ] QR Code 掃描匯入（讀取螢幕上的 QR）
-- [ ] 多語系（English UI）
+- [ ] QR Code 掃描匯入
+- [ ] 多語系 UI
 - [ ] Sparkle 自動更新
 
 ## 授權
 
 本專案以 **[GPL-3.0](LICENSE)** 釋出。
 
-核心引擎 [sing-box](https://github.com/SagerNet/sing-box)（GPLv3）以獨立、未修改的子程序方式執行，二進位檔來自官方 GitHub Releases，發佈版內嵌於 `.app`。分流規則集來自 [sing-geosite](https://github.com/SagerNet/sing-geosite) 與 [sing-geoip](https://github.com/SagerNet/sing-geoip)。
+Developer ID 直發版可使用 [sing-box](https://github.com/SagerNet/sing-box)（GPLv3）作為獨立、未修改的子程序；二進位檔來自官方 GitHub Releases，發佈版可內嵌於 `.app`。分流規則集來自 [sing-geosite](https://github.com/SagerNet/sing-geosite) 與 [sing-geoip](https://github.com/SagerNet/sing-geoip)。
+
+Mac App Store 路線改用 `ShadowCore` 與 Apple `NetworkExtension`，不包含 `sing-box`、外部核心下載或管理員授權流程。

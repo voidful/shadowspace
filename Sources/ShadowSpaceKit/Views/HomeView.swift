@@ -85,11 +85,17 @@ struct HomeView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if state.connectionState == .connected {
+#if APP_STORE
+                Text("透明代理已就緒，流量正透過「\(state.selectedNode?.name ?? "節點")」轉送")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+#else
                 Text(state.settings.tunMode
                      ? "TUN 模式已接管全部流量，正透過「\(state.selectedNode?.name ?? "節點")」轉送"
                      : "系統代理已就緒，流量正透過「\(state.selectedNode?.name ?? "節點")」轉送")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+#endif
             }
         }
         .multilineTextAlignment(.center)
@@ -173,7 +179,11 @@ struct HomeView: View {
                 Label("三步驟開始使用", systemImage: "sparkles")
                     .font(.headline)
                 VStack(alignment: .leading, spacing: 8) {
+#if APP_STORE
+                    Text("1. 複製你的節點分享連結（ss://、trojan://、vless://、socks://）或訂閱網址")
+#else
                     Text("1️⃣  複製你的節點分享連結（ss:// vmess:// trojan://…）或機場訂閱網址")
+#endif
                     Text("2️⃣  點下方按鈕，自動辨識並匯入")
                     Text("3️⃣  回到這裡按下大圓鈕，完成連線")
                 }

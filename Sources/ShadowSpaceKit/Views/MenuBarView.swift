@@ -11,7 +11,11 @@ struct MenuBarView: View {
             // VPN 狀態面板
             switch state.connectionState {
             case .connected:
+#if APP_STORE
+                Text("● VPN 已連線（透明代理）")
+#else
                 Text("● VPN 已連線\(state.settings.tunMode ? "（TUN 全域）" : "（系統代理）")")
+#endif
                 if let node = state.selectedNode {
                     Text("節點：\(node.name) · 模式：\(state.mode.displayName)")
                 } else {

@@ -67,6 +67,9 @@ public struct RejectOutbound: Outbound {
     public func connect(to target: Target, queue: DispatchQueue) async throws -> ByteStream {
         throw ProxyError.unsupported("已被規則拒絕：\(target.host)")
     }
+    public func openDatagramSession(to target: Target, queue: DispatchQueue) async throws -> DatagramSession {
+        throw ProxyError.unsupported("已被規則拒絕：\(target.host)")
+    }
 }
 
 /// 分流路由：依規則決定每個目標走 proxy / direct / reject。
