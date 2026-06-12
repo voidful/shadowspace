@@ -3,8 +3,31 @@ build/
 vendor/
 .DS_Store
 *.xcodeproj
-!AppStore/ShadowSpace.xcodeproj/
-!AppStore/ShadowSpace.xcodeproj/**
+*.xcworkspace
+*.xcarchive
+*.xcresult
+*.ipa
+*.dSYM/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.cer
+*.certSigningRequest
+*.key
+*.pem
+AuthKey_*.p8
+ExportOptions*.plist
 .swiftpm/
 .idea/
 .claude/
+
+# App Store Connect / review materials kept local because they can contain
+# account details, support contacts, screenshots, compliance answers,
+# generated upload packages, provisioning settings, and local Xcode projects.
+AppStore/
+Resources/
+shadowspace_privacy.html
+shadowspace_support.html
