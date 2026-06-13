@@ -224,6 +224,37 @@ struct UserRule: Codable, Identifiable, Hashable {
     }
 }
 
+// MARK: - 代理群組
+
+/// sing-box 原生支援的兩種群組型別：手動選擇與自動最快（urltest）。
+/// Clash 的 fallback / load-balance 屬 Clash 核心專有，sing-box 不支援，故不提供。
+enum ProxyGroupType: String, Codable, CaseIterable {
+    case select
+    case urltest
+
+    var displayName: String {
+        switch self {
+        case .select: return "手動選擇"
+        case .urltest: return "自動（最快）"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .select: return "hand.point.up.left"
+        case .urltest: return "bolt"
+        }
+    }
+}
+
+/// 代理群組：把多個節點組成一個可被選為出口的群組（地區群組、自動測速群組等）。
+struct ProxyGroup: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String = "群組"
+    var type: ProxyGroupType = .select
+    var memberNodeIDs: [UUID] = []
+}
+
 // MARK: - 設定
 
 enum EngineKind: String, Codable, CaseIterable {
@@ -297,23 +328,26 @@ struct PersistedState: Codable {
     var mode: ProxyMode = .rule
     var selectedNodeID: UUID?
     var rules: [UserRule] = []
+    var groups: [ProxyGroup] = []
 
     init(nodes: [ProxyNode] = [],
          subscriptions: [Subscription] = [],
          settings: AppSettings = AppSettings(),
          mode: ProxyMode = .rule,
          selectedNodeID: UUID? = nil,
-         rules: [UserRule] = []) {
+         rules: [UserRule] = [],
+         groups: [ProxyGroup] = []) {
         self.nodes = nodes
         self.subscriptions = subscriptions
         self.settings = settings
         self.mode = mode
         self.selectedNodeID = selectedNodeID
         self.rules = rules
+        self.groups = groups
     }
 
     private enum CodingKeys: String, CodingKey {
-        case nodes, subscriptions, settings, mode, selectedNodeID, rules
+        case nodes, subscriptions, settings, mode, selectedNodeID, rules, groups
     }
 
     init(from decoder: Decoder) throws {
@@ -324,6 +358,7 @@ struct PersistedState: Codable {
         mode = try c.decodeIfPresent(ProxyMode.self, forKey: .mode) ?? .rule
         selectedNodeID = try c.decodeIfPresent(UUID.self, forKey: .selectedNodeID)
         rules = try c.decodeIfPresent([UserRule].self, forKey: .rules) ?? []
+        groups = try c.decodeIfPresent([ProxyGroup].self, forKey: .groups) ?? []
     }
 }
 

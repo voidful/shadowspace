@@ -86,13 +86,13 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
             } else if state.connectionState == .connected {
 #if APP_STORE
-                Text("透明代理已就緒，流量正透過「\(state.selectedNode?.name ?? "節點")」轉送")
+                Text("透明代理已就緒，流量正透過「\(state.selectedOutboundName)」轉送")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 #else
                 Text(state.settings.tunMode
-                     ? "TUN 模式已接管全部流量，正透過「\(state.selectedNode?.name ?? "節點")」轉送"
-                     : "系統代理已就緒，流量正透過「\(state.selectedNode?.name ?? "節點")」轉送")
+                     ? "TUN 模式已接管全部流量，正透過「\(state.selectedOutboundName)」轉送"
+                     : "系統代理已就緒，流量正透過「\(state.selectedOutboundName)」轉送")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 #endif

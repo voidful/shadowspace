@@ -8,6 +8,8 @@ struct ServersView: View {
     @State private var editingNode: ProxyNode?
     @State private var showManualAdd = false
     @State private var qrNode: ProxyNode?
+    @State private var editingGroup: ProxyGroup?
+    @State private var showAddGroup = false
 
     var body: some View {
         Group {
@@ -30,6 +32,10 @@ struct ServersView: View {
                 Menu {
                     Button("貼上連結匯入…") { showImportSheet = true }
                     Button("手動新增節點…") { showManualAdd = true }
+                    if !state.nodes.isEmpty {
+                        Divider()
+                        Button("新增群組…") { showAddGroup = true }
+                    }
                 } label: {
                     Label("新增", systemImage: "plus")
                 }
@@ -78,6 +84,12 @@ struct ServersView: View {
         .sheet(item: $qrNode) { node in
             QRCodeSheet(node: node)
         }
+        .sheet(isPresented: $showAddGroup) {
+            GroupEditorSheet(group: nil)
+        }
+        .sheet(item: $editingGroup) { group in
+            GroupEditorSheet(group: group)
+        }
     }
 
     // MARK: - 清單
@@ -87,6 +99,13 @@ struct ServersView: View {
             get: { state.selectedNodeID },
             set: { if let id = $0 { state.selectNode(id) } }
         )) {
+            if !state.groups.isEmpty {
+                Section("群組") {
+                    ForEach(state.groups) { group in
+                        groupRow(group)
+                    }
+                }
+            }
             ForEach(state.subscriptions) { sub in
                 Section {
                     nodeRows(state.nodes.filter { $0.subscriptionID == sub.id })
@@ -136,6 +155,31 @@ struct ServersView: View {
                 Divider()
                 Button("刪除", role: .destructive) { state.deleteNode(node.id) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func groupRow(_ group: ProxyGroup) -> some View {
+        let selected = group.id == state.selectedNodeID
+        HStack(spacing: 8) {
+            Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(selected ? Color.accentColor : .secondary)
+            Image(systemName: group.type.icon)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(group.name).lineLimit(1)
+                Text("\(group.type.displayName) · \(group.memberNodeIDs.count) 個節點")
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+        }
+        .tag(group.id)
+        .contextMenu {
+            Button("使用此群組") { state.selectNode(group.id) }
+            Button("編輯…") { editingGroup = group }
+            Divider()
+            Button("刪除", role: .destructive) { state.deleteGroup(group.id) }
         }
     }
 
@@ -225,6 +269,94 @@ struct QRCodeSheet: View {
                 .buttonStyle(.borderedProminent)
         }
         .padding(24)
+    }
+}
+
+// MARK: - 群組編輯 Sheet
+
+struct GroupEditorSheet: View {
+    @EnvironmentObject private var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    let group: ProxyGroup?
+    @State private var draft = ProxyGroup()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(group == nil ? "新增群組" : "編輯群組")
+                .font(.headline)
+                .padding(.top, 16)
+
+            Form {
+                Section {
+                    TextField("名稱", text: $draft.name, prompt: Text("例如：香港、自動測速"))
+                    Picker("型別", selection: $draft.type) {
+                        ForEach(ProxyGroupType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                } footer: {
+                    Text(draft.type == .urltest
+                         ? "自動測速，永遠走成員中最快的節點。"
+                         : "手動在成員節點中選擇出口。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section("成員節點（\(draft.memberNodeIDs.count)）") {
+                    if state.nodes.isEmpty {
+                        Text("還沒有節點").foregroundStyle(.secondary)
+                    }
+                    ForEach(state.nodes) { node in
+                        Button {
+                            toggle(node.id)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: draft.memberNodeIDs.contains(node.id)
+                                      ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(draft.memberNodeIDs.contains(node.id)
+                                                     ? Color.accentColor : .secondary)
+                                ProtocolBadge(proto: node.proto)
+                                Text(node.name).lineLimit(1)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                if group != nil {
+                    Button("刪除", role: .destructive) {
+                        state.deleteGroup(draft.id); dismiss()
+                    }
+                }
+                Spacer()
+                Button("取消") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("儲存") {
+                    var g = draft
+                    if g.name.trimmingCharacters(in: .whitespaces).isEmpty { g.name = "群組" }
+                    state.upsertGroup(g)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .disabled(draft.memberNodeIDs.isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(width: 460, height: 540)
+        .onAppear { if let group { draft = group } }
+    }
+
+    private func toggle(_ id: UUID) {
+        if let idx = draft.memberNodeIDs.firstIndex(of: id) {
+            draft.memberNodeIDs.remove(at: idx)
+        } else {
+            draft.memberNodeIDs.append(id)
+        }
     }
 }
 

@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
     @Published var nodes: [ProxyNode] = []
     @Published var subscriptions: [Subscription] = []
     @Published var rules: [UserRule] = []
+    @Published var groups: [ProxyGroup] = []
     @Published var settings = AppSettings()
     @Published var mode: ProxyMode = .rule
     @Published var selectedNodeID: UUID?
@@ -53,6 +54,7 @@ final class AppState: ObservableObject {
     private var autoUpdateTimer: Timer?
 #if !APP_STORE
     private var tagByNodeID: [UUID: String] = [:]
+    private var tagByGroupID: [UUID: String] = [:]
     private var systemProxyActive = false
 
     private var api: ClashAPIClient {
@@ -62,6 +64,26 @@ final class AppState: ObservableObject {
 
     var selectedNode: ProxyNode? {
         nodes.first { $0.id == selectedNodeID } ?? nodes.first
+    }
+
+    /// 目前選定出口的名稱（可能是節點或群組）。
+    var selectedOutboundName: String {
+        if let id = selectedNodeID {
+            if let n = nodes.first(where: { $0.id == id }) { return n.name }
+            if let g = groups.first(where: { $0.id == id }) { return g.name }
+        }
+        return nodes.first?.name ?? "—"
+    }
+
+    /// 把選定出口解析成實際節點（群組 → 第一個成員節點）。原生 / App Store 引擎用。
+    var resolvedNode: ProxyNode? {
+        if let id = selectedNodeID {
+            if let n = nodes.first(where: { $0.id == id }) { return n }
+            if let g = groups.first(where: { $0.id == id }) {
+                return g.memberNodeIDs.lazy.compactMap { mid in self.nodes.first { $0.id == mid } }.first
+            }
+        }
+        return nodes.first
     }
 
     // MARK: - 初始化與持久化
@@ -87,6 +109,7 @@ final class AppState: ObservableObject {
             nodes = persisted.nodes
             subscriptions = persisted.subscriptions
             rules = persisted.rules
+            groups = persisted.groups
             settings = persisted.settings
             mode = persisted.mode
             selectedNodeID = persisted.selectedNodeID
@@ -116,7 +139,7 @@ final class AppState: ObservableObject {
     func save() {
         let persisted = PersistedState(
             nodes: nodes, subscriptions: subscriptions, settings: settings,
-            mode: mode, selectedNodeID: selectedNodeID, rules: rules)
+            mode: mode, selectedNodeID: selectedNodeID, rules: rules, groups: groups)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? encoder.encode(persisted) {
@@ -201,8 +224,9 @@ final class AppState: ObservableObject {
 
             let result = SingBoxConfigBuilder.build(
                 nodes: nodes, selectedID: selectedNodeID,
-                settings: settings, mode: mode, rules: rules)
+                settings: settings, mode: mode, groups: groups, rules: rules)
             tagByNodeID = result.tagByNodeID
+            tagByGroupID = result.tagByGroupID
 
             engineLog.removeAll()
             let configData = try SingBoxConfigBuilder.jsonData(result.json)
@@ -247,7 +271,7 @@ final class AppState: ObservableObject {
 
 #if APP_STORE
     private func connectAppStoreTunnel() async {
-        guard let node = selectedNode else {
+        guard let node = resolvedNode else {
             connectionState = .disconnected
             errorMessage = "找不到可用節點"
             return
@@ -271,7 +295,7 @@ final class AppState: ObservableObject {
 #else
 
     private func connectNative() async {
-        guard let node = selectedNode else {
+        guard let node = resolvedNode else {
             connectionState = .disconnected
             errorMessage = "找不到可用節點"
             return
@@ -425,7 +449,7 @@ final class AppState: ObservableObject {
             Task { await disconnect(); await connect() }
             return
         }
-        guard let tag = tagByNodeID[id] else { return }
+        guard let tag = tagByGroupID[id] ?? tagByNodeID[id] else { return }
         let client = api
         Task { [weak self] in
             do {
@@ -593,10 +617,28 @@ final class AppState: ObservableObject {
     func deleteNode(_ id: UUID) {
         nodes.removeAll { $0.id == id }
         latencies.removeValue(forKey: id)
+        for i in groups.indices { groups[i].memberNodeIDs.removeAll { $0 == id } }
         if selectedNodeID == id {
             selectedNodeID = nodes.first?.id
         }
         save()
+    }
+
+    // MARK: - 代理群組
+
+    func upsertGroup(_ group: ProxyGroup) {
+        if let index = groups.firstIndex(where: { $0.id == group.id }) {
+            groups[index] = group
+        } else {
+            groups.append(group)
+        }
+        saveAndApply()
+    }
+
+    func deleteGroup(_ id: UUID) {
+        groups.removeAll { $0.id == id }
+        if selectedNodeID == id { selectedNodeID = nodes.first?.id }
+        saveAndApply()
     }
 
     // MARK: - 自訂規則

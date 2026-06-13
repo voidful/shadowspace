@@ -10,6 +10,8 @@ enum SingBoxConfigBuilder {
         var json: [String: Any]
         /// 節點 ID → 設定檔中的 outbound tag（切換節點時用）
         var tagByNodeID: [UUID: String]
+        /// 群組 ID → outbound tag
+        var tagByGroupID: [UUID: String] = [:]
     }
 
     static let selectorTag = "PROXY"
@@ -25,6 +27,7 @@ enum SingBoxConfigBuilder {
                       selectedID: UUID?,
                       settings: AppSettings,
                       mode: ProxyMode,
+                      groups: [ProxyGroup] = [],
                       rules userRules: [UserRule] = []) -> BuildResult {
 
         // --- 唯一化 outbound tag ---
@@ -44,11 +47,30 @@ enum SingBoxConfigBuilder {
         }
 
         let nodeTags = nodes.compactMap { tagByNodeID[$0.id] }
-        let defaultTag = selectedID.flatMap { tagByNodeID[$0] } ?? nodeTags.first ?? directTag
+
+        // --- 群組 tag（避免與節點 / 保留字衝突）---
+        var tagByGroupID: [UUID: String] = [:]
+        for group in groups {
+            var base = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if base.isEmpty { base = "群組" }
+            var tag = base
+            var n = 2
+            while usedTags.contains(tag) { tag = "\(base) \(n)"; n += 1 }
+            usedTags.insert(tag)
+            tagByGroupID[group.id] = tag
+        }
+        // 只保留至少有一個有效成員的群組
+        let validGroups = groups.filter { group in
+            group.memberNodeIDs.contains { tagByNodeID[$0] != nil }
+        }
+        let groupTags = validGroups.compactMap { tagByGroupID[$0.id] }
+
+        let defaultTag = selectedID.flatMap { tagByGroupID[$0] ?? tagByNodeID[$0] }
+            ?? groupTags.first ?? nodeTags.first ?? directTag
 
         // --- outbounds ---
         var outbounds: [[String: Any]] = []
-        var selectorMembers: [String] = []
+        var selectorMembers: [String] = groupTags     // 群組排在最前面
         if nodes.count > 1 {
             selectorMembers.append(autoTag)
         }
@@ -69,6 +91,29 @@ enum SingBoxConfigBuilder {
                 "url": "http://www.gstatic.com/generate_204",
                 "interval": "5m",
             ])
+        }
+        // 使用者自訂群組
+        for group in validGroups {
+            let memberTags = group.memberNodeIDs.compactMap { tagByNodeID[$0] }
+            let gtag = tagByGroupID[group.id]!
+            switch group.type {
+            case .select:
+                outbounds.append([
+                    "type": "selector",
+                    "tag": gtag,
+                    "outbounds": memberTags,
+                    "default": memberTags.first!,
+                    "interrupt_exist_connections": true,
+                ])
+            case .urltest:
+                outbounds.append([
+                    "type": "urltest",
+                    "tag": gtag,
+                    "outbounds": memberTags,
+                    "url": "http://www.gstatic.com/generate_204",
+                    "interval": "5m",
+                ])
+            }
         }
         var endpoints: [[String: Any]] = []
         for node in nodes {
@@ -196,7 +241,7 @@ enum SingBoxConfigBuilder {
         if !endpoints.isEmpty {
             config["endpoints"] = endpoints
         }
-        return BuildResult(json: config, tagByNodeID: tagByNodeID)
+        return BuildResult(json: config, tagByNodeID: tagByNodeID, tagByGroupID: tagByGroupID)
     }
 
     static func jsonData(_ config: [String: Any]) throws -> Data {
