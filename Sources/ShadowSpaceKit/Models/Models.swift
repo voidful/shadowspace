@@ -73,6 +73,9 @@ struct ProxyNode: Codable, Identifiable, Hashable {
     var wgLocalAddress: [String]?
     var wgMTU: Int?
 
+    // 節點鏈：先經此中轉節點，再連到本節點伺服器（sing-box detour）
+    var dialerNodeID: UUID?
+
     // 來源訂閱（手動新增為 nil）
     var subscriptionID: UUID?
 }

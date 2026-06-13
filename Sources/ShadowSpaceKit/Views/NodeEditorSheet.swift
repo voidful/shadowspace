@@ -35,6 +35,7 @@ struct NodeEditorSheet: View {
                 authSection
                 if showsTLSSection { tlsSection }
                 if showsTransportSection { transportSection }
+                relaySection
             }
             .formStyle(.grouped)
 
@@ -210,6 +211,32 @@ struct NodeEditorSheet: View {
             }
         }
     }
+
+    // MARK: - 節點鏈（中轉）
+
+    @ViewBuilder
+    private var relaySection: some View {
+        let candidates = state.nodes.filter { $0.id != draft.id && $0.proto != .wireguard }
+        if !candidates.isEmpty, draft.proto != .wireguard {
+            Section {
+                Picker("中轉節點", selection: Binding(
+                    get: { draft.dialerNodeID ?? Self.noRelay },
+                    set: { draft.dialerNodeID = ($0 == Self.noRelay) ? nil : $0 }
+                )) {
+                    Text("無（直接連線）").tag(Self.noRelay)
+                    ForEach(candidates) { node in
+                        Text(node.name).tag(node.id)
+                    }
+                }
+            } header: {
+                Text("節點鏈")
+            } footer: {
+                Text("先經中轉節點再連到本節點，形成「中轉 → 落地」鏈路。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private static let noRelay = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
     // MARK: - Optional<String> 綁定小工具
 

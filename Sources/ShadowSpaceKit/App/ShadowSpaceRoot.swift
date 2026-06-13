@@ -20,8 +20,15 @@ public struct ShadowSpaceRoot: App {
             MenuBarView()
                 .environmentObject(state)
         } label: {
-            Image(systemName: menuBarSymbol)
-                .accessibilityLabel(menuBarStatusText)
+            HStack(spacing: 5) {
+                Image(systemName: menuBarSymbol)
+                if let trafficText = menuBarTrafficText {
+                    Text(trafficText)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                }
+            }
+            .accessibilityLabel(menuBarStatusText)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -35,8 +42,16 @@ public struct ShadowSpaceRoot: App {
         }
     }
 
+    private var menuBarTrafficText: String? {
+        guard state.connectionState == .connected else { return nil }
+        return "↓ \(state.downRate.menuBarRateString) ↑ \(state.upRate.menuBarRateString)"
+    }
+
     private var menuBarStatusText: String {
-        "ShadowSpace：\(state.connectionState.label)"
+        guard state.connectionState == .connected else {
+            return "ShadowSpace：\(state.connectionState.label)"
+        }
+        return "ShadowSpace：已連線，下載 \(state.downRate.rateString)，上傳 \(state.upRate.rateString)"
     }
 }
 

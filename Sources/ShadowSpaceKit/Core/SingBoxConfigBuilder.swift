@@ -120,7 +120,8 @@ enum SingBoxConfigBuilder {
             if node.proto == .wireguard {
                 endpoints.append(wireguardEndpoint(for: node, tag: tagByNodeID[node.id]!))
             } else {
-                outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!))
+                let detour = node.dialerNodeID.flatMap { tagByNodeID[$0] }
+                outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!, detour: detour))
             }
         }
         outbounds.append(["type": "direct", "tag": directTag])
@@ -329,7 +330,7 @@ enum SingBoxConfigBuilder {
         return endpoint
     }
 
-    static func outbound(for node: ProxyNode, tag: String) -> [String: Any] {
+    static func outbound(for node: ProxyNode, tag: String, detour: String? = nil) -> [String: Any] {
         var ob: [String: Any] = [
             "tag": tag,
             "server": node.server,
@@ -393,6 +394,7 @@ enum SingBoxConfigBuilder {
         if let transport = transportDict(for: node) {
             ob["transport"] = transport
         }
+        if let detour { ob["detour"] = detour }   // 節點鏈：經中轉節點
         return ob
     }
 
