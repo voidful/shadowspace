@@ -9,6 +9,7 @@ enum NodeProtocol: String, Codable, CaseIterable {
     case trojan
     case hysteria2
     case tuic
+    case anytls
     case socks
     case wireguard
 
@@ -20,6 +21,7 @@ enum NodeProtocol: String, Codable, CaseIterable {
         case .trojan: return "Trojan"
         case .hysteria2: return "Hysteria2"
         case .tuic: return "TUIC"
+        case .anytls: return "AnyTLS"
         case .socks: return "SOCKS"
         case .wireguard: return "WireGuard"
         }

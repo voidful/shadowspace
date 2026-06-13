@@ -82,6 +82,7 @@ enum URIParser {
         case "hysteria2", "hy2": return parseHysteria2(s)
         case "tuic": return parseTUIC(s)
         case "socks", "socks5": return parseSOCKS(s)
+        case "anytls": return parseAnyTLS(s)
         default: return nil
         }
     }
@@ -334,6 +335,27 @@ enum URIParser {
         if let cc = q["congestion_control"], !cc.isEmpty {
             node.congestionControl = cc
         }
+        if let alpn = q["alpn"], !alpn.isEmpty {
+            node.alpn = alpn.split(separator: ",").map(String.init)
+        }
+        return node
+    }
+
+    // MARK: - AnyTLS
+
+    /// anytls://password@host:port?sni=&insecure=&alpn=#name
+    static func parseAnyTLS(_ raw: String) -> ProxyNode? {
+        guard let parts = splitURI(raw),
+              let pw = parts.userinfo, !pw.isEmpty, parts.port > 0 else { return nil }
+        var node = ProxyNode(
+            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            proto: .anytls, server: parts.host, port: parts.port
+        )
+        node.password = pw.removingPercentEncoding ?? pw
+        node.tls = true
+        let q = parts.query
+        node.sni = q["sni"] ?? q["peer"]
+        node.insecure = ["1", "true"].contains((q["allowInsecure"] ?? q["insecure"] ?? "").lowercased())
         if let alpn = q["alpn"], !alpn.isEmpty {
             node.alpn = alpn.split(separator: ",").map(String.init)
         }

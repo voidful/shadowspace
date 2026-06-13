@@ -39,6 +39,7 @@ enum SingBoxNodeParser {
         case "hysteria2": proto = .hysteria2
         case "tuic": proto = .tuic
         case "socks": proto = .socks
+        case "anytls": proto = .anytls
         default: return nil   // selector/urltest/direct/block/dns 等不是節點
         }
         var node = ProxyNode(name: name, proto: proto, server: server, port: port)
@@ -54,7 +55,7 @@ enum SingBoxNodeParser {
         case .vless:
             node.uuid = ob["uuid"] as? String
             node.flow = ob["flow"] as? String
-        case .trojan:
+        case .trojan, .anytls:
             node.password = ob["password"] as? String
         case .hysteria2:
             node.password = ob["password"] as? String

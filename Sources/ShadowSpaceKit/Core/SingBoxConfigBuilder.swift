@@ -389,6 +389,9 @@ enum SingBoxConfigBuilder {
             ob["uuid"] = node.uuid ?? ""
             ob["password"] = node.password ?? ""
             if let cc = node.congestionControl { ob["congestion_control"] = cc }
+        case .anytls:
+            ob["type"] = "anytls"
+            ob["password"] = node.password ?? ""
         case .socks:
             ob["type"] = "socks"
             ob["version"] = "5"
@@ -396,7 +399,7 @@ enum SingBoxConfigBuilder {
             if let pw = node.password { ob["password"] = pw }
         }
 
-        if node.tls {
+        if node.tls || node.proto == .anytls {
             var tls: [String: Any] = [
                 "enabled": true,
                 "server_name": node.sni ?? node.wsHost ?? node.server,

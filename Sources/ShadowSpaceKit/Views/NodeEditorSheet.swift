@@ -79,7 +79,7 @@ struct NodeEditorSheet: View {
             return !(draft.method ?? "").isEmpty && !(draft.password ?? "").isEmpty
         case .vmess, .vless:
             return !(draft.uuid ?? "").isEmpty
-        case .trojan, .hysteria2:
+        case .trojan, .hysteria2, .anytls:
             return !(draft.password ?? "").isEmpty
         case .tuic:
             return !(draft.uuid ?? "").isEmpty
@@ -120,7 +120,7 @@ struct NodeEditorSheet: View {
                     Text("無").tag("")
                     Text("xtls-rprx-vision").tag("xtls-rprx-vision")
                 }
-            case .trojan:
+            case .trojan, .anytls:
                 SecureInput("密碼", text: optional($draft.password))
             case .hysteria2:
                 SecureInput("密碼", text: optional($draft.password))
@@ -149,14 +149,14 @@ struct NodeEditorSheet: View {
 
     private var showsTLSSection: Bool {
         switch draft.proto {
-        case .vmess, .vless, .trojan, .hysteria2, .tuic: return true
+        case .vmess, .vless, .trojan, .hysteria2, .tuic, .anytls: return true
         case .shadowsocks, .socks, .wireguard: return false
         }
     }
 
     private var tlsForced: Bool {
         switch draft.proto {
-        case .trojan, .hysteria2, .tuic: return true
+        case .trojan, .hysteria2, .tuic, .anytls: return true
         default: return false
         }
     }

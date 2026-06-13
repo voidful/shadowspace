@@ -235,6 +235,15 @@ enum ClashYAMLParser {
             node.password = str(m, "password")
             return node
 
+        case "anytls":
+            var node = ProxyNode(name: name, proto: .anytls, server: server, port: port)
+            node.password = str(m, "password") ?? ""
+            node.tls = true
+            node.sni = str(m, "sni") ?? str(m, "servername")
+            node.insecure = bool(m, "skip-cert-verify")
+            node.alpn = list(m, "alpn")
+            return node
+
         case "hysteria2", "hy2":
             var node = ProxyNode(name: name, proto: .hysteria2, server: server, port: port)
             node.password = str(m, "password") ?? str(m, "auth") ?? ""

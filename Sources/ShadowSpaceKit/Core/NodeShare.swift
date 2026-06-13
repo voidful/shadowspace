@@ -100,6 +100,12 @@ enum NodeShare {
             if node.insecure { items.append(("allow_insecure", "1")) }
             return "tuic://\(encodeComponent(node.uuid ?? "")):\(encodeComponent(node.password ?? ""))@\(host):\(node.port)\(queryString(items))\(name)"
 
+        case .anytls:
+            var items: [(String, String?)] = [("sni", node.sni)]
+            if node.insecure { items.append(("allowInsecure", "1")) }
+            if let alpn = node.alpn, !alpn.isEmpty { items.append(("alpn", alpn.joined(separator: ","))) }
+            return "anytls://\(encodeComponent(node.password ?? ""))@\(host):\(node.port)\(queryString(items))\(name)"
+
         case .socks:
             if let user = node.username {
                 let userinfo = Data("\(user):\(node.password ?? "")".utf8).base64EncodedString()
