@@ -1,10 +1,12 @@
 import SwiftUI
 import ServiceManagement
 import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var state: AppState
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var showConfigSheet = false
 
     private let remoteDNSPresets: [(String, String)] = [
         ("Google (8.8.8.8)", "8.8.8.8"),
@@ -221,6 +223,14 @@ struct SettingsView: View {
             }
 #endif
 
+            Section("進階") {
+#if !APP_STORE
+                Button("檢視產生的 sing-box 設定") { showConfigSheet = true }
+#endif
+                Button("匯出備份…") { exportBackup() }
+                Button("匯入備份…") { importBackup() }
+            }
+
             Section("關於") {
                 LabeledContent("ShadowSpace", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知版本")
 #if APP_STORE
@@ -236,6 +246,29 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("設定")
+        .sheet(isPresented: $showConfigSheet) {
+            ConfigViewerSheet(json: state.generatedConfigJSON())
+        }
+    }
+
+    private func exportBackup() {
+        guard let data = state.exportBackup() else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "ShadowSpace-backup.json"
+        panel.allowedContentTypes = [.json]
+        if panel.runModal() == .OK, let url = panel.url {
+            try? data.write(to: url)
+            state.toastMessage = "已匯出備份"
+        }
+    }
+
+    private func importBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) {
+            state.importBackup(data)
+        }
     }
 
     private func toggleLaunchAtLogin(_ enabled: Bool) {
@@ -249,6 +282,40 @@ struct SettingsView: View {
             launchAtLogin = SMAppService.mainApp.status == .enabled
             state.errorMessage = "無法設定登入啟動：\(error.localizedDescription)\n（提示：需以 .app 形式執行，開發模式 swift run 不支援）"
         }
+    }
+}
+
+// MARK: - 設定檢視 Sheet
+
+struct ConfigViewerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let json: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("產生的 sing-box 設定")
+                .font(.headline)
+            ScrollView {
+                Text(json)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            HStack {
+                Button("複製") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(json, forType: .string)
+                }
+                Spacer()
+                Button("完成") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 600, height: 560)
     }
 }
 

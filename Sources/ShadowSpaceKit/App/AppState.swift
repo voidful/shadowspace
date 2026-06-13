@@ -764,6 +764,49 @@ final class AppState: ObservableObject {
 #endif
     }
 
+    // MARK: - 進階 / 備份
+
+    /// 產生目前設定對應的 sing-box 設定（JSON 字串，除錯用）。
+    func generatedConfigJSON() -> String {
+        let result = SingBoxConfigBuilder.build(
+            nodes: nodes, selectedID: selectedNodeID,
+            settings: settings, mode: mode, groups: groups, rules: rules)
+        if let data = try? SingBoxConfigBuilder.jsonData(result.json),
+           let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        return "（無法產生設定）"
+    }
+
+    /// 匯出節點 / 群組 / 規則 / 設定為備份資料。
+    func exportBackup() -> Data? {
+        let persisted = PersistedState(
+            nodes: nodes, subscriptions: subscriptions, settings: settings,
+            mode: mode, selectedNodeID: selectedNodeID, rules: rules, groups: groups)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try? encoder.encode(persisted)
+    }
+
+    /// 從備份資料還原（覆蓋目前所有設定）。
+    @discardableResult
+    func importBackup(_ data: Data) -> Bool {
+        guard let p = try? JSONDecoder().decode(PersistedState.self, from: data) else {
+            errorMessage = "備份檔格式不正確，無法匯入。"
+            return false
+        }
+        nodes = p.nodes
+        subscriptions = p.subscriptions
+        rules = p.rules
+        groups = p.groups
+        settings = p.settings
+        mode = p.mode
+        selectedNodeID = p.selectedNodeID
+        save()
+        toastMessage = "已匯入備份（\(p.nodes.count) 節點、\(p.groups.count) 群組）"
+        return true
+    }
+
     // MARK: - 引擎安裝
 
     func installOrUpdateEngine() async {
