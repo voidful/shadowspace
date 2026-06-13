@@ -158,8 +158,29 @@ enum SingBoxConfigBuilder {
         routeRules.append(["clash_mode": "Global", "outbound": selectorTag])
         routeRules.append(["clash_mode": "Direct", "outbound": directTag])
 
+        var urlRuleSetIndex = 0
         for rule in userRules where rule.enabled && !rule.values.isEmpty {
-            if let dict = ruleDict(rule, ensureRuleSet: ensureRuleSet) {
+            if rule.type == .ruleSet {
+                // 使用者訂閱的遠端規則集（.srs binary 或 .json source）
+                var tags: [String] = []
+                for url in rule.values {
+                    let tag = "ruleset-\(urlRuleSetIndex)"
+                    urlRuleSetIndex += 1
+                    let format = url.lowercased().hasSuffix(".srs") ? "binary" : "source"
+                    ruleSets[tag] = [
+                        "type": "remote", "tag": tag, "format": format,
+                        "url": url, "download_detour": directTag, "update_interval": "1d",
+                    ]
+                    tags.append(tag)
+                }
+                var d: [String: Any] = ["rule_set": tags]
+                switch rule.policy {
+                case .reject: d["action"] = "reject"
+                case .proxy: d["outbound"] = selectorTag
+                case .direct: d["outbound"] = directTag
+                }
+                routeRules.append(d)
+            } else if let dict = ruleDict(rule, ensureRuleSet: ensureRuleSet) {
                 routeRules.append(dict)
             }
         }
@@ -269,6 +290,8 @@ enum SingBoxConfigBuilder {
             let tags = values.map { "geosite-\($0.lowercased())" }
             tags.forEach(ensureRuleSet)
             dict["rule_set"] = tags
+        case .ruleSet:
+            return nil   // 由 build() 直接處理（需要 URL）
         }
         switch rule.policy {
         case .reject: dict["action"] = "reject"

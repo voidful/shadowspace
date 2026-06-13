@@ -90,7 +90,7 @@ enum NativeEngineAdapter {
                     case .domainKeyword: routing.append(RoutingRule(.domainKeyword(value), policy))
                     case .domainExact: routing.append(RoutingRule(.domainExact(value), policy))
                     case .ipCIDR: routing.append(RoutingRule(.ipCIDR(value), policy))
-                    case .geoIP, .geosite, .processName: break   // 原生引擎暫不支援
+                    case .geoIP, .geosite, .processName, .ruleSet: break   // 原生引擎暫不支援
                     }
                 }
             }

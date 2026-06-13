@@ -172,6 +172,7 @@ enum RuleType: String, Codable, CaseIterable {
     case geoIP
     case geosite
     case processName
+    case ruleSet
 
     var displayName: String {
         switch self {
@@ -182,6 +183,7 @@ enum RuleType: String, Codable, CaseIterable {
         case .geoIP: return "GeoIP 國家"
         case .geosite: return "Geosite 分類"
         case .processName: return "程序名稱"
+        case .ruleSet: return "規則集 URL"
         }
     }
 
@@ -194,6 +196,7 @@ enum RuleType: String, Codable, CaseIterable {
         case .geoIP: return "us"
         case .geosite: return "netflix"
         case .processName: return "Telegram"
+        case .ruleSet: return "https://example.com/rules.srs"
         }
     }
 }
