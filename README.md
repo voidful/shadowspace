@@ -88,16 +88,9 @@ Developer ID 直發版可在「設定」切換代理引擎：
 - `原生（App Store）`：預設路線，純 Swift / Apple framework，適合 SS / Trojan / VLESS / SOCKS5。
 - `sing-box（完整）`：完整協議與 TUN 能力，適合需要 Reality、Hysteria2、TUIC、WireGuard 或 GeoIP / Geosite 的使用者。
 
-## App Store 工作區
+## App Store 版
 
-SwiftPM 無法直接產生 `.appex`，所以 App Store 版用 `AppStore/` 工作區與產生器建立 Xcode 工程：
-
-```bash
-make appstore-project
-make appstore-preflight
-```
-
-`make appstore-preflight` 會產生 `AppStore/ShadowSpace.xcodeproj`、檢查 plist / entitlement / privacy manifest、做不簽章 Release build，並確認主 App 內有 `ShadowTunnel.appex` 且不含 `sing-box`。
+App Store 版採 Apple NetworkExtension（透明代理）實作，目前開發中。
 
 ## 常見問題
 
@@ -153,7 +146,6 @@ make engine
 - `make dev`：直接執行開發版
 - `make app`：打包 `build/ShadowSpace.app`
 - `make engine`：下載並內嵌 `sing-box`
-- `make appstore-preflight`：驗證 App Store project 可產生、可建置、可嵌入 extension
 
 ## 發佈
 
