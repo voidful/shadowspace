@@ -31,6 +31,7 @@ struct ServersView: View {
 
                 Menu {
                     Button("貼上連結匯入…") { showImportSheet = true }
+                    Button("掃描剪貼簿 QR") { Task { await state.importQRFromClipboard() } }
                     Button("手動新增節點…") { showManualAdd = true }
                     if !state.nodes.isEmpty {
                         Divider()

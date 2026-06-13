@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import CoreImage
 import ShadowCore
 
 /// App 的中央狀態：節點、訂閱、規則、連線生命週期、流量統計。
@@ -501,6 +502,47 @@ final class AppState: ObservableObject {
             return
         }
         await importText(text)
+    }
+
+    /// 處理 shadowspace:// URL（從瀏覽器/其他 App 一鍵匯入）。
+    /// shadowspace://import?url=<訂閱網址> 或 ?text=<分享連結，可多行>；
+    /// 後備：shadowspace://import/<百分比編碼內容>。
+    func handleURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "shadowspace" else { return }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let payload = comps?.queryItems?.first(where: { $0.name == "url" || $0.name == "text" })?.value,
+           !payload.isEmpty {
+            Task { await importText(payload) }
+            return
+        }
+        let tail = ((comps?.host == "import" ? "" : (comps?.host ?? "")) + (comps?.path ?? ""))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let decoded = (tail.removingPercentEncoding ?? tail).trimmingCharacters(in: .whitespacesAndNewlines)
+        if decoded.isEmpty {
+            toastMessage = "無法辨識的匯入連結"
+        } else {
+            Task { await importText(decoded) }
+        }
+    }
+
+    /// 從剪貼簿圖片掃 QR Code 匯入（截圖 QR 後直接匯入）。
+    func importQRFromClipboard() async {
+        guard let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self])?.first as? NSImage,
+              let tiff = image.tiffRepresentation,
+              let ci = CIImage(data: tiff) else {
+            toastMessage = "剪貼簿沒有圖片。先截圖 QR Code（⌃⌘⇧4）再試。"
+            return
+        }
+        let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
+                                  options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
+        let payloads = (detector?.features(in: ci) ?? [])
+            .compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+            .filter { !$0.isEmpty }
+        guard !payloads.isEmpty else {
+            toastMessage = "圖片中找不到 QR Code"
+            return
+        }
+        await importText(payloads.joined(separator: "\n"))
     }
 
     func importText(_ text: String) async {

@@ -13,6 +13,7 @@ public struct ShadowSpaceRoot: App {
             MainWindow()
                 .environmentObject(state)
                 .frame(minWidth: 700, minHeight: 460)
+                .onOpenURL { state.handleURL($0) }
         }
         .defaultSize(width: 780, height: 540)
 
