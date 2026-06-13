@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ShadowSpace - macOS 代理工具</title>
+    <meta
+      name="description"
+      content="ShadowSpace 是台灣用語友善的 macOS 代理工具，支援選單列常駐、訂閱匯入、規則分流、TUN 增強模式與 Developer ID 公證 DMG 下載。"
+    >
+    <meta property="og:title" content="ShadowSpace - macOS 代理工具">
+    <meta
+      property="og:description"
+      content="一鍵連線、訂閱匯入、規則分流、TUN 增強模式，給 macOS 使用者的 Shadowrocket 風格代理工具。"
+    >
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="./screenshot-main.png">
+    <meta name="theme-color" content="#111113">
+    <link rel="icon" href="./favicon.ico">
+    <link rel="icon" type="image/png" href="./app-icon.png">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header" aria-label="主要導覽">
+      <a class="brand" href="#top" aria-label="ShadowSpace 首頁">
+        <img src="./app-icon.png" width="40" height="40" alt="">
+        <span>ShadowSpace</span>
+      </a>
+      <nav class="nav-links" aria-label="頁面區塊">
+        <a href="#download">下載</a>
+        <a href="#features">功能</a>
+        <a href="#routes">版本差異</a>
+        <a href="https://github.com/voidful/shadowspace">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <img class="hero-media" src="./hero-background.jpg" alt="" aria-hidden="true">
+        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="eyebrow">macOS 14+ · Developer ID 公證 DMG</p>
+          <h1 id="hero-title">ShadowSpace</h1>
+          <p class="hero-lede">
+            台灣用語友善的 macOS 代理工具。選單列常駐、一鍵連線、訂閱匯入、規則分流，
+            需要完整能力時也能使用 sing-box 與 TUN 增強模式。
+          </p>
+          <div class="hero-actions" aria-label="下載與專案連結">
+            <a class="button button-primary" href="#download">下載最新版</a>
+            <a class="button button-secondary" href="https://github.com/voidful/shadowspace">查看原始碼</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="download-band" id="download" aria-labelledby="download-title">
+        <div class="section-inner download-layout">
+          <div>
+            <p class="section-kicker">Latest Release</p>
+            <h2 id="download-title">下載 ShadowSpace v0.2.1</h2>
+            <p>
+              DMG 已用 Developer ID 簽章並送 Apple 公證。下載後打開 <code>.dmg</code>，
+              將 ShadowSpace 拖到「應用程式」即可開始使用。
+            </p>
+          </div>
+          <div class="download-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/voidful/shadowspace/releases/download/v0.2.1/ShadowSpace-0.2.1.dmg"
+            >
+              下載 DMG
+            </a>
+            <a class="button button-secondary" href="https://github.com/voidful/shadowspace/releases/latest">
+              所有版本
+            </a>
+          </div>
+          <ul class="release-facts" aria-label="Release 資訊">
+            <li>
+              <span>版本</span>
+              <strong>v0.2.1</strong>
+            </li>
+            <li>
+              <span>檔案大小</span>
+              <strong>23 MB</strong>
+            </li>
+            <li>
+              <span>系統需求</span>
+              <strong>macOS 14+</strong>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="section-inner">
+          <p class="section-kicker">Designed For Daily Routing</p>
+          <h2 id="features-title">熟悉的代理工作流，整理成乾淨的 Mac App</h2>
+          <div class="feature-grid">
+            <article class="feature-card feature-card-blue">
+              <h3>一鍵連線</h3>
+              <p>首頁大按鈕搭配規則、全域、直連三種模式，平常使用不用鑽進複雜設定。</p>
+            </article>
+            <article class="feature-card feature-card-green">
+              <h3>訂閱與節點管理</h3>
+              <p>支援常見節點 URI、base64 訂閱、剪貼簿匯入、手動編輯與分享連結輸出。</p>
+            </article>
+            <article class="feature-card feature-card-amber">
+              <h3>規則分流</h3>
+              <p>用網域、關鍵字、IP CIDR、GeoIP、Geosite 與程序規則決定代理、直連或拒絕。</p>
+            </article>
+            <article class="feature-card feature-card-red">
+              <h3>TUN 增強模式</h3>
+              <p>Developer ID 直發版可接管終端機、Docker 等不吃系統代理的流量。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="showcase" aria-labelledby="showcase-title">
+        <div class="section-inner">
+          <div class="showcase-copy">
+            <p class="section-kicker">Native macOS Feel</p>
+            <h2 id="showcase-title">選單列常駐，視窗介面不打擾</h2>
+            <p>
+              ShadowSpace 用 SwiftUI 做出接近系統原生的操作節奏：首頁看狀態、節點頁管理伺服器、
+              規則頁調整分流、連線頁查看目前流量。
+            </p>
+          </div>
+          <img class="product-shot" src="./screenshot-main.png" alt="ShadowSpace 深色主介面截圖">
+        </div>
+      </section>
+
+      <section class="section section-muted" id="routes" aria-labelledby="routes-title">
+        <div class="section-inner">
+          <p class="section-kicker">Distribution Routes</p>
+          <h2 id="routes-title">兩條發佈路線，各自保持清楚</h2>
+          <div class="route-grid">
+            <article class="route-card">
+              <h3>Developer ID 直發版</h3>
+              <p>
+                適合需要完整協議、TUN、系統代理控制、GeoIP / Geosite 與 DNS 分流的使用者。
+                目前下載的 DMG 就是這條完整路線。
+              </p>
+              <ul>
+                <li>Shadowsocks、VMess、VLESS、Trojan、Hysteria2、TUIC、SOCKS5、WireGuard</li>
+                <li>可用 sing-box 完整引擎與 TUN 增強模式</li>
+                <li>Developer ID 簽章與 Apple 公證</li>
+              </ul>
+            </article>
+            <article class="route-card">
+              <h3>Mac App Store 版</h3>
+              <p>
+                為沙箱與審查相容另外準備的原生透明代理路線，不混入外部核心、
+                管理員 TUN 或系統代理修改流程。
+              </p>
+              <ul>
+                <li>以 ShadowCore 與 NetworkExtension 為核心</li>
+                <li>支援 Shadowsocks、Trojan、VLESS、SOCKS5 等原生路徑</li>
+                <li>功能範圍比直發版保守，保持 App Store 相容性</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="open-title">
+        <div class="section-inner open-layout">
+          <div>
+            <p class="section-kicker">Open Source</p>
+            <h2 id="open-title">開源、可驗證、可自行建置</h2>
+            <p>
+              專案以 GPL-3.0 釋出。你可以查看原始碼、自己跑測試，也可以用 <code>make release</code>
+              走同一套 Developer ID 打包流程。
+            </p>
+          </div>
+          <div class="open-actions">
+            <a class="button button-secondary" href="https://github.com/voidful/shadowspace">GitHub Repo</a>
+            <a class="button button-secondary" href="https://github.com/voidful/shadowspace/blob/main/PACKAGING.md">
+              發佈打包指南
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="section-inner footer-layout">
+        <p>ShadowSpace · GPL-3.0 · macOS 14+</p>
+        <a href="https://github.com/voidful/shadowspace/releases/latest">Latest Release</a>
+      </div>
+    </footer>
+  </body>
+</html>
