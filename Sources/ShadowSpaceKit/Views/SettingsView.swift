@@ -88,6 +88,18 @@ struct SettingsView: View {
                         set: { state.settings.autoSystemProxy = $0; state.save() }
                     ))
                 }
+                if state.settings.engineKind == .singbox {
+                    Toggle(isOn: Binding(
+                        get: { state.settings.killSwitch },
+                        set: { state.settings.killSwitch = $0; state.save() }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Kill switch（防洩漏）")
+                            Text("sing-box 引擎意外停止時保留系統代理以阻擋流量直連外洩；重新連線即可恢復。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
 #endif
                 Toggle("登入時啟動", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in

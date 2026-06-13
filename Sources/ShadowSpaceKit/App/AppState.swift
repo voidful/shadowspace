@@ -127,8 +127,7 @@ final class AppState: ObservableObject {
         engine.onUnexpectedExit = { [weak self] status in
             Task { @MainActor in
                 guard let self, self.connectionState == .connected || self.connectionState == .connecting else { return }
-                self.teardownAfterStop()
-                self.errorMessage = "引擎意外停止（代碼 \(status)）。可到「日誌」分頁查看原因。"
+                self.handleUnexpectedExit(status: status)
             }
         }
 #endif
@@ -381,6 +380,25 @@ final class AppState: ObservableObject {
 #endif
         teardownAfterStop()
     }
+
+#if !APP_STORE
+    /// 引擎意外停止：Kill switch 開啟時保留系統代理（指向已停的埠）以阻擋流量外洩。
+    private func handleUnexpectedExit(status: Int32) {
+        if settings.killSwitch && systemProxyActive {
+            engine.stop()
+            nativeEngine?.stop(); nativeEngine = nil
+            trafficTask?.cancel(); trafficTask = nil
+            upRate = 0; downRate = 0
+            trafficHistory = []
+            connections = []
+            connectionState = .disconnected
+            errorMessage = "引擎意外停止（代碼 \(status)）。Kill switch 已啟用：系統代理保持開啟以阻擋流量外洩。請重新連線恢復上網，或結束 App 還原網路設定。"
+            return
+        }
+        teardownAfterStop()
+        errorMessage = "引擎意外停止（代碼 \(status)）。可到「日誌」分頁查看原因。"
+    }
+#endif
 
     private func teardownAfterStop() {
         trafficTask?.cancel()

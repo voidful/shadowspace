@@ -301,13 +301,15 @@ struct AppSettings: Codable {
     var tlsFragment = false
     /// 偵測到網路可用時自動連線（On-demand）
     var autoConnect = false
+    /// Kill switch：引擎意外停止時保留系統代理以阻擋流量外洩
+    var killSwitch = false
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
-        case subscriptionUA, tlsFragment, autoConnect
+        case subscriptionUA, tlsFragment, autoConnect, killSwitch
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -328,6 +330,7 @@ struct AppSettings: Codable {
         subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? "sing-box/1.13.13"
         tlsFragment = try c.decodeIfPresent(Bool.self, forKey: .tlsFragment) ?? false
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
+        killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
     }
 }
 

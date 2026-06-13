@@ -139,6 +139,12 @@ struct RuleEditorSheet: View {
                 Text("逗號分隔可一次填多個，例如：youtube.com, ytimg.com")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if draft.type == .processName {
+                    Label("分應用分流需開啟 TUN 模式才能依程序比對；系統代理模式下此規則不會生效。",
+                          systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Picker("策略", selection: $draft.policy) {
