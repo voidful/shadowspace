@@ -7,7 +7,7 @@ import Security
 public enum TLSTransport {
 
     public static func parameters(sni: String?, insecure: Bool, alpn: [String]?,
-                                  queue: DispatchQueue) -> NWParameters {
+                                  fragment: Bool = false, queue: DispatchQueue) -> NWParameters {
         let tls = NWProtocolTLS.Options()
         let sec = tls.securityProtocolOptions
         if let sni, !sni.isEmpty {
@@ -22,13 +22,21 @@ public enum TLSTransport {
                 complete(true)
             }, queue)
         }
-        return NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+        let tcp = NWProtocolTCP.Options()
+        if fragment { tcp.noDelay = true }   // 關 Nagle，讓小段各自成為獨立區段
+        let params = NWParameters(tls: tls, tcp: tcp)
+        if fragment {
+            // 把分片 framer 接在 TLS 之下、TCP 之上
+            let framerOptions = NWProtocolFramer.Options(definition: TLSFragmentFramer.definition)
+            params.defaultProtocolStack.applicationProtocols.append(framerOptions)
+        }
+        return params
     }
 
     public static func dial(host: String, port: UInt16,
                             sni: String?, insecure: Bool, alpn: [String]?,
-                            queue: DispatchQueue) async throws -> NWStream {
-        let params = parameters(sni: sni, insecure: insecure, alpn: alpn, queue: queue)
+                            fragment: Bool = false, queue: DispatchQueue) async throws -> NWStream {
+        let params = parameters(sni: sni, insecure: insecure, alpn: alpn, fragment: fragment, queue: queue)
         let endpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: port) ?? .any)

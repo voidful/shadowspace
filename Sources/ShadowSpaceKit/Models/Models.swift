@@ -297,13 +297,15 @@ struct AppSettings: Codable {
     var engineKind: EngineKind = .native
     /// 拉取訂閱時的 User-Agent（機場常依此決定回傳格式）
     var subscriptionUA = "sing-box/1.13.13"
+    /// TLS ClientHello 分片（原生引擎，抗封鎖）
+    var tlsFragment = false
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
-        case subscriptionUA
+        case subscriptionUA, tlsFragment
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -322,6 +324,7 @@ struct AppSettings: Codable {
         subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
         engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .native
         subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? "sing-box/1.13.13"
+        tlsFragment = try c.decodeIfPresent(Bool.self, forKey: .tlsFragment) ?? false
     }
 }
 

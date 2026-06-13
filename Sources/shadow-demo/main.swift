@@ -12,7 +12,7 @@ let port = UInt16(args.dropFirst().first(where: { UInt16($0) != nil }) ?? "") ??
 func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
 
 /// 最小 vless:// 解析（測試用）：vless://uuid@host:port?security&type&sni&host&path#name
-func parseVlessURI(_ uri: String) -> Outbound? {
+func parseVlessURI(_ uri: String, fragment: Bool = false) -> Outbound? {
     guard uri.hasPrefix("vless://") else { return nil }
     var rest = String(uri.dropFirst("vless://".count))
     if let h = rest.firstIndex(of: "#") { rest = String(rest[..<h]) }
@@ -33,6 +33,7 @@ func parseVlessURI(_ uri: String) -> Outbound? {
     var t = TransportConfig()
     t.tls = (query["security"] == "tls" || query["security"] == "reality")
     t.sni = query["sni"]
+    t.fragment = fragment
     if query["type"] == "ws" {
         t.network = .ws
         t.wsPath = query["path"] ?? "/"
@@ -51,9 +52,10 @@ if let i = args.firstIndex(of: "--socks"), i + 1 < args.count {
         log("--socks 參數格式錯誤"); exit(1)
     }
 } else if let i = args.firstIndex(of: "--vless"), i + 1 < args.count {
-    guard let o = parseVlessURI(args[i + 1]) else { log("--vless URI 解析失敗"); exit(1) }
+    let frag = args.contains("--fragment")
+    guard let o = parseVlessURI(args[i + 1], fragment: frag) else { log("--vless URI 解析失敗"); exit(1) }
     outbound = o
-    log("出站 = VLESS（\(args[i + 1].prefix(50))…）")
+    log("出站 = VLESS（\(args[i + 1].prefix(50))…）\(frag ? " [TLS 分片]" : "")")
 } else {
     outbound = DirectOutbound()
 }

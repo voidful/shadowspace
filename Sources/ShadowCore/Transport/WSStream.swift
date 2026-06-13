@@ -8,7 +8,7 @@ public final class WSStream: ByteStream, @unchecked Sendable {
     private let queue: DispatchQueue
 
     public init(host: String, port: UInt16, path: String, hostHeader: String?,
-                tls: Bool, sni: String?, insecure: Bool, queue: DispatchQueue) {
+                tls: Bool, sni: String?, insecure: Bool, fragment: Bool = false, queue: DispatchQueue) {
         self.queue = queue
         let wsOptions = NWProtocolWebSocket.Options()
         wsOptions.autoReplyPing = true
@@ -16,7 +16,8 @@ public final class WSStream: ByteStream, @unchecked Sendable {
             wsOptions.setAdditionalHeaders([("Host", hostHeader)])
         }
         let params: NWParameters = tls
-            ? TLSTransport.parameters(sni: sni ?? hostHeader ?? host, insecure: insecure, alpn: nil, queue: queue)
+            ? TLSTransport.parameters(sni: sni ?? hostHeader ?? host, insecure: insecure,
+                                      alpn: nil, fragment: fragment, queue: queue)
             : .tcp
         params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 

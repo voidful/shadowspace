@@ -12,10 +12,12 @@ public struct TransportConfig: Sendable {
     public var alpn: [String]?
     public var wsPath: String = "/"
     public var wsHost: String?
+    /// TLS ClientHello 分片（抗封鎖）
+    public var fragment: Bool = false
 
     public init(network: NetworkKind = .tcp, tls: Bool = false, sni: String? = nil,
                 insecure: Bool = false, alpn: [String]? = nil,
-                wsPath: String = "/", wsHost: String? = nil) {
+                wsPath: String = "/", wsHost: String? = nil, fragment: Bool = false) {
         self.network = network
         self.tls = tls
         self.sni = sni
@@ -23,6 +25,7 @@ public struct TransportConfig: Sendable {
         self.alpn = alpn
         self.wsPath = wsPath
         self.wsHost = wsHost
+        self.fragment = fragment
     }
 }
 
@@ -34,7 +37,8 @@ public enum Transport {
             if config.tls {
                 return try await TLSTransport.dial(
                     host: host, port: port, sni: config.sni ?? host,
-                    insecure: config.insecure, alpn: config.alpn, queue: queue)
+                    insecure: config.insecure, alpn: config.alpn,
+                    fragment: config.fragment, queue: queue)
             } else {
                 let tcp = NWStream(host: host, port: port, queue: queue)
                 try await tcp.start()
@@ -42,7 +46,8 @@ public enum Transport {
             }
         case .ws:
             let ws = WSStream(host: host, port: port, path: config.wsPath, hostHeader: config.wsHost,
-                              tls: config.tls, sni: config.sni, insecure: config.insecure, queue: queue)
+                              tls: config.tls, sni: config.sni, insecure: config.insecure,
+                              fragment: config.fragment, queue: queue)
             try await ws.start()
             return ws
         }

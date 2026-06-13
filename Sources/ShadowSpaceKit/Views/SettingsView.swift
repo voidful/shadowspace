@@ -46,6 +46,18 @@ struct SettingsView: View {
                         Text(kind.displayName).tag(kind)
                     }
                 }
+                if state.settings.engineKind == .native {
+                    Toggle(isOn: Binding(
+                        get: { state.settings.tlsFragment },
+                        set: { state.settings.tlsFragment = $0; state.saveAndApply() }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("TLS 分片（抗封鎖）")
+                            Text("把 TLS ClientHello 切成多段送出，干擾 DPI 的 SNI 偵測。原生引擎適用。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             } header: {
                 Text("引擎")
             } footer: {

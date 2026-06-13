@@ -12,7 +12,7 @@ enum NativeEngineAdapter {
     }
 
     /// ProxyNode → ShadowCore.Outbound。不支援的協議/特性丟出清楚的錯誤。
-    static func outbound(for node: ProxyNode) throws -> Outbound {
+    static func outbound(for node: ProxyNode, fragment: Bool = false) throws -> Outbound {
         let host = node.server
         let port = UInt16(clamping: node.port)
 
@@ -28,7 +28,7 @@ enum NativeEngineAdapter {
         case .trojan:
             return TrojanOutbound(name: node.name, host: host, port: port,
                                   password: node.password ?? "",
-                                  transport: transport(for: node, defaultTLS: true))
+                                  transport: transport(for: node, defaultTLS: true, fragment: fragment))
 
         case .vless:
             if node.realityPublicKey?.isEmpty == false {
@@ -36,7 +36,7 @@ enum NativeEngineAdapter {
             }
             guard let outbound = VlessOutbound(
                 name: node.name, host: host, port: port, uuid: node.uuid ?? "",
-                transport: transport(for: node, defaultTLS: node.tls)) else {
+                transport: transport(for: node, defaultTLS: node.tls, fragment: fragment)) else {
                 throw AdapterError.unsupported("VLESS UUID 格式錯誤")
             }
             return outbound
@@ -56,12 +56,13 @@ enum NativeEngineAdapter {
         }
     }
 
-    static func transport(for node: ProxyNode, defaultTLS: Bool) -> TransportConfig {
+    static func transport(for node: ProxyNode, defaultTLS: Bool, fragment: Bool = false) -> TransportConfig {
         var config = TransportConfig()
         config.tls = node.tls || defaultTLS
         config.sni = node.sni
         config.insecure = node.insecure
         config.alpn = node.alpn
+        config.fragment = fragment && config.tls   // 只有 TLS 連線才需要分片
         if node.network == "ws" {
             config.network = .ws
             config.wsPath = node.wsPath ?? "/"
