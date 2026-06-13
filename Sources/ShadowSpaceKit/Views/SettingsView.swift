@@ -93,6 +93,16 @@ struct SettingsView: View {
                     .onChange(of: launchAtLogin) { _, enabled in
                         toggleLaunchAtLogin(enabled)
                     }
+                Toggle(isOn: Binding(
+                    get: { state.settings.autoConnect },
+                    set: { state.settings.autoConnect = $0; state.save() }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("偵測到網路就自動連線")
+                        Text("開機或網路切換、恢復時自動連上；手動斷線後不會自動重連。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("一般")
             }

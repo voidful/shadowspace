@@ -55,6 +55,8 @@ final class AppState: ObservableObject {
     private var trafficTask: Task<Void, Never>?
     private var connectionsTask: Task<Void, Never>?
     private var autoUpdateTimer: Timer?
+    private let netMonitor = NetworkMonitor()
+    private var lastNetSatisfied = false
 #if !APP_STORE
     private var tagByNodeID: [UUID: String] = [:]
     private var tagByGroupID: [UUID: String] = [:]
@@ -137,6 +139,11 @@ final class AppState: ObservableObject {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await self?.autoRefreshIfDue()
         }
+        // On-demand：監看網路變化，必要時自動連線
+        netMonitor.onChange = { [weak self] satisfied, _ in
+            Task { @MainActor in self?.handleNetworkChange(satisfied: satisfied) }
+        }
+        netMonitor.start()
     }
 
     func save() {
@@ -190,6 +197,14 @@ final class AppState: ObservableObject {
         default:
             break
         }
+    }
+
+    /// On-demand：網路從無到有，且開了自動連線、目前斷線、有節點 → 自動連線。
+    private func handleNetworkChange(satisfied: Bool) {
+        defer { lastNetSatisfied = satisfied }
+        guard settings.autoConnect, satisfied, !lastNetSatisfied else { return }
+        guard connectionState == .disconnected, !nodes.isEmpty else { return }
+        Task { await connect() }
     }
 
     func connect() async {
