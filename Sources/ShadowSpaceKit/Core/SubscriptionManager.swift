@@ -12,7 +12,7 @@ enum SubscriptionManager {
             switch self {
             case .badURL: return "訂閱連結格式不正確"
             case .fetchFailed(let msg): return "訂閱下載失敗：\(msg)"
-            case .noNodes: return "訂閱內容解析不到任何節點（支援 base64 分享連結與 sing-box JSON；Clash YAML 還在開發中）。可到「設定 → 訂閱」調整 User-Agent 再試。"
+            case .noNodes: return "訂閱內容解析不到任何節點（支援 base64 分享連結、sing-box JSON、Clash YAML）。可到「設定 → 訂閱」調整 User-Agent 再試。"
             }
         }
     }
@@ -50,10 +50,13 @@ enum SubscriptionManager {
             throw SubError.fetchFailed("回應內容無法解碼")
         }
 
-        // sing-box JSON config（送 sing-box UA 時機場常回此格式）優先，否則 base64 / 分享連結
+        // 依內容判型：sing-box JSON > Clash YAML > base64 / 分享連結
         let nodes: [ProxyNode]
         if SingBoxNodeParser.looksLikeConfig(text) {
             let parsed = SingBoxNodeParser.parse(data)
+            nodes = parsed.isEmpty ? URIParser.parseMultiple(text) : parsed
+        } else if ClashYAMLParser.looksLikeConfig(text) {
+            let parsed = ClashYAMLParser.parse(text)
             nodes = parsed.isEmpty ? URIParser.parseMultiple(text) : parsed
         } else {
             nodes = URIParser.parseMultiple(text)
