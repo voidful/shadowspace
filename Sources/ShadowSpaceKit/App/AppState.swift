@@ -46,6 +46,7 @@ final class AppState: ObservableObject {
 
     @Published var errorMessage: String?          // 跳 alert 用
     @Published var toastMessage: String?          // 輕量回饋（匯入成功等）
+    @Published var availableUpdate: UpdateInfo?   // 有新版可下載（GitHub Releases）
 
 #if !APP_STORE
     private let engine = EngineManager()
@@ -144,6 +145,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in self?.handleNetworkChange(satisfied: satisfied) }
         }
         netMonitor.start()
+        if settings.autoCheckUpdates { checkForUpdates() }
     }
 
     func save() {
@@ -893,6 +895,32 @@ final class AppState: ObservableObject {
         save()
         toastMessage = "已匯入備份（\(p.nodes.count) 節點、\(p.groups.count) 群組）"
         return true
+    }
+
+    // MARK: - 更新檢查
+
+    /// 檢查 GitHub Releases 是否有新版。App Store 版由商店更新，不在此檢查。
+    func checkForUpdates(manual: Bool = false) {
+#if !APP_STORE
+        Task { [weak self] in
+            let release = await UpdateChecker.latest()
+            guard let self else { return }
+            guard let release else {
+                if manual { self.toastMessage = "無法檢查更新，請稍後再試" }
+                return
+            }
+            let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+            if UpdateChecker.isNewer(release.version, than: current) {
+                self.availableUpdate = UpdateInfo(version: release.version, url: release.htmlURL, notes: release.notes)
+                if manual { self.toastMessage = "發現新版本 \(release.version)" }
+            } else {
+                self.availableUpdate = nil
+                if manual { self.toastMessage = "已是最新版本（\(current)）" }
+            }
+        }
+#else
+        if manual { toastMessage = "App Store 版由商店自動更新" }
+#endif
     }
 
     // MARK: - 引擎安裝

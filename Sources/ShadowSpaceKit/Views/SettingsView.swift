@@ -263,6 +263,22 @@ struct SettingsView: View {
                 Text("核心引擎使用開源專案 sing-box（GPLv3），以獨立子程序方式執行。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let update = state.availableUpdate {
+                    HStack {
+                        Label("有新版本 \(update.version)", systemImage: "arrow.down.circle.fill")
+                            .foregroundStyle(.green)
+                        Spacer()
+                        Button("前往下載") {
+                            if let url = URL(string: update.url) { NSWorkspace.shared.open(url) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                Button("檢查更新…") { state.checkForUpdates(manual: true) }
+                Toggle("啟動時自動檢查更新", isOn: Binding(
+                    get: { state.settings.autoCheckUpdates },
+                    set: { state.settings.autoCheckUpdates = $0; state.save() }
+                ))
 #endif
             }
         }

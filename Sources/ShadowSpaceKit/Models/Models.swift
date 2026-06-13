@@ -305,13 +305,15 @@ struct AppSettings: Codable {
     var autoConnect = false
     /// Kill switch：引擎意外停止時保留系統代理以阻擋流量外洩
     var killSwitch = false
+    /// 啟動時自動檢查更新（GitHub Releases）
+    var autoCheckUpdates = true
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
-        case subscriptionUA, tlsFragment, autoConnect, killSwitch
+        case subscriptionUA, tlsFragment, autoConnect, killSwitch, autoCheckUpdates
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -333,6 +335,7 @@ struct AppSettings: Codable {
         tlsFragment = try c.decodeIfPresent(Bool.self, forKey: .tlsFragment) ?? false
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
+        autoCheckUpdates = try c.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
     }
 }
 
