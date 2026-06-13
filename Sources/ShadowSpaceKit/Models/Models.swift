@@ -373,6 +373,14 @@ struct PersistedState: Codable {
 
 // MARK: - 連線記錄（Clash API /connections）
 
+/// 即時流量取樣（流量圖用）。seq 為遞增序號，當作圖表 X 軸。
+struct TrafficSample: Identifiable, Equatable {
+    let seq: Int
+    let up: Int      // bytes/s
+    let down: Int    // bytes/s
+    var id: Int { seq }
+}
+
 struct ConnectionInfo: Identifiable, Equatable {
     var id: String
     var target: String       // host:port

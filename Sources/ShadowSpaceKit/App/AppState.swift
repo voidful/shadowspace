@@ -24,6 +24,9 @@ final class AppState: ObservableObject {
     @Published var downRate = 0
     @Published var sessionUpTotal = 0
     @Published var sessionDownTotal = 0
+    @Published var trafficHistory: [TrafficSample] = []
+    private var trafficSeq = 0
+    static let trafficWindow = 60
     @Published var latencies: [UUID: Int] = [:]   // ms；測過但失敗 = -1
     @Published var isPinging = false
 
@@ -344,8 +347,7 @@ final class AppState: ObservableObject {
     private func pollNativeTraffic() {
         guard let eng = nativeEngine else { return }
         let up = eng.upTotal, down = eng.downTotal
-        upRate = max(0, up - nativeLastUp)
-        downRate = max(0, down - nativeLastDown)
+        pushTraffic(up: max(0, up - nativeLastUp), down: max(0, down - nativeLastDown))
         nativeLastUp = up; nativeLastDown = down
         sessionUpTotal = up; sessionDownTotal = down
     }
@@ -378,8 +380,20 @@ final class AppState: ObservableObject {
 #endif
         upRate = 0
         downRate = 0
+        trafficHistory = []
         connections = []
         connectionState = .disconnected
+    }
+
+    /// 統一更新即時速率並寫入歷史環形緩衝（流量圖用）。
+    func pushTraffic(up: Int, down: Int) {
+        upRate = up
+        downRate = down
+        trafficSeq &+= 1
+        trafficHistory.append(TrafficSample(seq: trafficSeq, up: up, down: down))
+        if trafficHistory.count > Self.trafficWindow {
+            trafficHistory.removeFirst(trafficHistory.count - Self.trafficWindow)
+        }
     }
 
     /// App 結束前的同步清理：還原系統代理、停掉引擎
@@ -406,8 +420,7 @@ final class AppState: ObservableObject {
                     if let sample = ClashAPIClient.parseTrafficLine(line) {
                         await MainActor.run {
                             guard let self else { return }
-                            self.upRate = sample.up
-                            self.downRate = sample.down
+                            self.pushTraffic(up: sample.up, down: sample.down)
                             self.sessionUpTotal += sample.up
                             self.sessionDownTotal += sample.down
                         }

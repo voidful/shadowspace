@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 /// 首頁：大開關 + 模式 + 目前節點 + 流量，一眼看懂、一鍵連線。
 struct HomeView: View {
@@ -162,6 +163,9 @@ struct HomeView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                if state.trafficHistory.count > 1 {
+                    trafficChart
+                }
             }
             .padding(6)
             .frame(maxWidth: .infinity)
@@ -169,6 +173,40 @@ struct HomeView: View {
             Text("即時流量").foregroundStyle(.secondary)
         }
         .frame(maxWidth: 460)
+    }
+
+    /// 即時流量折線圖（上傳橘、下載綠），X 軸為取樣序號。
+    private var trafficChart: some View {
+        Chart {
+            ForEach(state.trafficHistory) { s in
+                AreaMark(x: .value("序", s.seq), y: .value("速率", s.down))
+                    .foregroundStyle(.green.opacity(0.12))
+                    .interpolationMethod(.monotone)
+            }
+            ForEach(state.trafficHistory) { s in
+                LineMark(x: .value("序", s.seq), y: .value("速率", s.down))
+                    .foregroundStyle(by: .value("方向", "下載"))
+                    .interpolationMethod(.monotone)
+            }
+            ForEach(state.trafficHistory) { s in
+                LineMark(x: .value("序", s.seq), y: .value("速率", s.up))
+                    .foregroundStyle(by: .value("方向", "上傳"))
+                    .interpolationMethod(.monotone)
+            }
+        }
+        .chartForegroundStyleScale(["下載": Color.green, "上傳": Color.orange])
+        .chartLegend(.hidden)
+        .chartXAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let v = value.as(Int.self) { Text(v.rateString).font(.caption2) }
+                }
+            }
+        }
+        .frame(height: 96)
+        .padding(.top, 4)
     }
 
     // MARK: - 新手引導
