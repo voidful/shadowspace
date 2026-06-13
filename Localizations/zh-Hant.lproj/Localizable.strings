@@ -1,0 +1,4 @@
+/* ShadowSpace — 繁體中文（預設）。
+   UI 字串本身即為繁體中文，作為 LocalizedStringKey 的 key 使用，
+   找不到對應翻譯時自動回退為 key 本身（即中文原文），故這裡毋須逐條列出。
+   保留此檔讓 App 明確宣告支援 zh-Hant。 */

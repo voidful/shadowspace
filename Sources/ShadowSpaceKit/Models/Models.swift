@@ -130,9 +130,9 @@ enum ProxyMode: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .rule: return "規則"
-        case .global: return "全域"
-        case .direct: return "直連"
+        case .rule: return String(localized: "規則")
+        case .global: return String(localized: "全域")
+        case .direct: return String(localized: "直連")
         }
     }
 
@@ -156,10 +156,10 @@ enum ConnectionState: Equatable {
 
     var label: String {
         switch self {
-        case .disconnected: return "未連線"
-        case .connecting: return "連線中…"
-        case .connected: return "已連線"
-        case .stopping: return "正在中斷…"
+        case .disconnected: return String(localized: "未連線")
+        case .connecting: return String(localized: "連線中…")
+        case .connected: return String(localized: "已連線")
+        case .stopping: return String(localized: "正在中斷…")
         }
     }
 }
@@ -178,14 +178,14 @@ enum RuleType: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .domainSuffix: return "網域後綴"
-        case .domainKeyword: return "網域關鍵字"
-        case .domainExact: return "完整網域"
-        case .ipCIDR: return "IP 區段"
-        case .geoIP: return "GeoIP 國家"
-        case .geosite: return "Geosite 分類"
-        case .processName: return "程序名稱"
-        case .ruleSet: return "規則集 URL"
+        case .domainSuffix: return String(localized: "網域後綴")
+        case .domainKeyword: return String(localized: "網域關鍵字")
+        case .domainExact: return String(localized: "完整網域")
+        case .ipCIDR: return String(localized: "IP 區段")
+        case .geoIP: return String(localized: "GeoIP 國家")
+        case .geosite: return String(localized: "Geosite 分類")
+        case .processName: return String(localized: "程序名稱")
+        case .ruleSet: return String(localized: "規則集 URL")
         }
     }
 
@@ -210,9 +210,9 @@ enum RulePolicy: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .proxy: return "代理"
-        case .direct: return "直連"
-        case .reject: return "拒絕"
+        case .proxy: return String(localized: "代理")
+        case .direct: return String(localized: "直連")
+        case .reject: return String(localized: "拒絕")
         }
     }
 }
@@ -242,8 +242,8 @@ enum ProxyGroupType: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .select: return "手動選擇"
-        case .urltest: return "自動（最快）"
+        case .select: return String(localized: "手動選擇")
+        case .urltest: return String(localized: "自動（最快）")
         }
     }
 
@@ -271,8 +271,8 @@ enum EngineKind: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .singbox: return "sing-box（完整）"
-        case .native: return "原生（App Store）"
+        case .singbox: return String(localized: "sing-box（完整）")
+        case .native: return String(localized: "原生（App Store）")
         }
     }
 }

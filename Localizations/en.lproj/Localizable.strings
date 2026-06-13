@@ -1,0 +1,254 @@
+/* ShadowSpace — English UI strings.
+   Keys are the original Traditional-Chinese UI strings (used verbatim as LocalizedStringKey
+   in SwiftUI). When the system language is English, these translations are shown instead.
+   Interpolated/dynamic status & log strings are not localised here. */
+
+/* Onboarding */
+"1. 複製你的節點分享連結（ss://、trojan://、vless://、socks://）或訂閱網址" = "1. Copy your node share link (ss://, trojan://, vless://, socks://) or subscription URL";
+"1️⃣  複製你的節點分享連結（ss:// vmess:// trojan://…）或機場訂閱網址" = "1️⃣  Copy your node share link (ss:// vmess:// trojan://…) or provider subscription URL";
+"2️⃣  點下方按鈕，自動辨識並匯入" = "2️⃣  Tap the button below to auto-detect and import";
+"3️⃣  回到這裡按下大圓鈕，完成連線" = "3️⃣  Come back and press the big button to connect";
+"三步驟開始使用" = "Get started in three steps";
+
+/* Engine / editions */
+"App Store 版使用 Apple NetworkExtension 透明代理，不包含 sing-box 子程序、TUN 管理員授權或系統代理改寫。支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）。" = "The App Store edition uses Apple NetworkExtension transparent proxy — no sing-box subprocess, TUN admin authorisation, or system-proxy changes. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss).";
+"App Store 版使用原生代理核心與 NetworkExtension，不包含外部代理核心或管理員授權流程。" = "The App Store edition uses a native proxy core with NetworkExtension — no external proxy core or admin authorisation flow.";
+"原生 NetworkExtension" = "Native NetworkExtension";
+"原生引擎純 Apple 框架、可上 App Store，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整（Developer ID 發佈版）。" = "The native engine uses pure Apple frameworks and is App Store-eligible. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss); no Reality / Hysteria2 / TUIC / VMess / TUN. The sing-box engine is full-featured (Developer ID build).";
+"核心引擎使用開源專案 sing-box（GPLv3），以獨立子程序方式執行。" = "The core engine uses the open-source sing-box (GPLv3), run as a separate subprocess.";
+"代理引擎" = "Proxy engine";
+"引擎" = "Engine";
+"核心引擎" = "Core engine";
+"sing-box 版本" = "sing-box version";
+"下載並安裝引擎" = "Download and install engine";
+"更新引擎" = "Update engine";
+"尚未安裝" = "Not installed";
+"由系統管理" = "Managed by system";
+
+/* Node fields */
+"Host（可空）" = "Host (optional)";
+"Reality 公鑰（pbk，可空）" = "Reality public key (pbk, optional)";
+"SNI（可空，預設用伺服器位址）" = "SNI (optional, defaults to server address)";
+"uTLS 指紋" = "uTLS fingerprint";
+"gRPC 服務名稱" = "gRPC service name";
+"example.com 或 IP" = "example.com or IP";
+"伺服器" = "Server";
+"名稱" = "Name";
+"密碼" = "Password";
+"密碼（可空）" = "Password (optional)";
+"帳號（可空）" = "Username (optional)";
+"加密" = "Encryption";
+"加密方式" = "Encryption method";
+"協議" = "Protocol";
+"連接埠" = "Port";
+"路徑" = "Path";
+"傳輸" = "Transport";
+"傳輸方式" = "Transport type";
+"啟用 TLS" = "Enable TLS";
+"允許不安全憑證" = "Allow insecure certificates";
+"壅塞控制" = "Congestion control";
+"混淆密碼" = "Obfs password";
+"混淆（obfs，可空）" = "Obfuscation (obfs, optional)";
+"認證" = "Authentication";
+"基本" = "Basic";
+"逾時" = "Timeout";
+"WireGuard 請用「貼上匯入」貼入 .conf 設定檔內容" = "For WireGuard, use Paste to Import with your .conf file contents";
+
+/* Settings */
+"Kill switch（防洩漏）" = "Kill switch (leak protection)";
+"sing-box 引擎意外停止時保留系統代理以阻擋流量直連外洩；重新連線即可恢復。" = "If the sing-box engine stops unexpectedly, keep the system proxy to block direct-traffic leaks; reconnect to restore.";
+"TLS 分片（抗封鎖）" = "TLS fragmentation (anti-censorship)";
+"把 TLS ClientHello 切成多段送出，干擾 DPI 的 SNI 偵測。原生引擎適用。" = "Splits the TLS ClientHello into several segments to disrupt DPI SNI detection. Native engine only.";
+"TUN 模式（增強模式）" = "TUN mode (enhanced)";
+"建立虛擬網卡接管全部流量，含終端機與不吃系統代理的 App。連線時需輸入一次管理員密碼。" = "Creates a virtual NIC to capture all traffic, including the terminal and apps that ignore the system proxy. Requires your admin password once when connecting.";
+"連線時自動設定系統代理" = "Set system proxy automatically when connecting";
+"偵測到網路就自動連線" = "Auto-connect when network is available";
+"開機或網路切換、恢復時自動連上；手動斷線後不會自動重連。" = "Connects automatically on startup or network change/recovery; won't auto-reconnect after a manual disconnect.";
+"允許區域網路連入" = "Allow LAN connections";
+"登入時啟動" = "Launch at login";
+"啟動時自動檢查更新" = "Check for updates on launch";
+"代理連接埠（HTTP/SOCKS 共用）" = "Proxy port (shared HTTP/SOCKS)";
+"控制 API 連接埠" = "Control API port";
+"連線中修改連接埠，需重新連線後生效。" = "Changing the port while connected takes effect after reconnecting.";
+"阻擋廣告" = "Block ads";
+"使用 AdGuard 廣告網域清單，所有模式皆生效" = "Use the AdGuard ad-domain list; applies in all modes";
+"中國大陸網站直連" = "China sites direct";
+"規則模式下，中國大陸網域與 IP 不走代理" = "In Rule mode, China domains and IPs bypass the proxy";
+"遠端 DNS（代理流量）" = "Remote DNS (proxied traffic)";
+"直連 DNS" = "Direct DNS";
+"系統解析" = "System resolver";
+"自訂值支援 IP、https://（DoH）與 tls://（DoT）。遠端 DNS 透過代理解析，避免 DNS 污染。" = "Custom values support IP, https:// (DoH), and tls:// (DoT). Remote DNS resolves through the proxy to avoid DNS pollution.";
+"例如 9.9.9.9 或 https://dns.example.com/dns-query" = "e.g. 9.9.9.9 or https://dns.example.com/dns-query";
+"拉取 User-Agent" = "Fetch User-Agent";
+"機場常依 User-Agent 回傳不同格式。送 sing-box 會拿到完整設定（含 VLESS、WS/Reality 等）；改 UA 後到「節點」分頁重新整理訂閱即生效。" = "Providers often return different formats based on User-Agent. Sending sing-box yields a full config (incl. VLESS, WS/Reality). After changing the UA, refresh the subscription on the Nodes tab to apply.";
+"透明代理由 NetworkExtension 管理，不開本機 HTTP/SOCKS 監聽埠。" = "The transparent proxy is managed by NetworkExtension; no local HTTP/SOCKS listening port.";
+"檢查更新…" = "Check for updates…";
+"檢視產生的 sing-box 設定" = "View generated sing-box config";
+"產生的 sing-box 設定" = "Generated sing-box config";
+"開啟設定資料夾" = "Open settings folder";
+
+/* Tabs / sections */
+"首頁" = "Home";
+"節點" = "Nodes";
+"規則" = "Rules";
+"日誌" = "Logs";
+"設定" = "Settings";
+"一般" = "General";
+"網路" = "Network";
+"進階" = "Advanced";
+"關於" = "About";
+"資料" = "Data";
+"訂閱" = "Subscriptions";
+"群組" = "Group";
+"常用" = "Common";
+"模式" = "Mode";
+"代理模式" = "Proxy mode";
+"內建規則" = "Built-in rules";
+"自動更新" = "Auto-update";
+
+/* Connection status */
+"○ VPN 中斷中…" = "○ Disconnecting…";
+"○ VPN 未連線" = "○ Not connected";
+"○ VPN 連線中…" = "○ Connecting…";
+"● VPN 已連線（透明代理）" = "● Connected (transparent proxy)";
+"（TUN 全域）" = "(TUN global)";
+"（未填寫）" = "(not set)";
+"（系統代理）" = "(system proxy)";
+"尚未連線" = "Not connected";
+"目前節點" = "Current node";
+"即時流量" = "Live traffic";
+"上傳" = "Upload";
+"下載" = "Download";
+"速率" = "Rate";
+"方向" = "Direction";
+"序" = "Seq";
+"時間" = "Time";
+"目標" = "Target";
+"策略" = "Policy";
+
+/* Actions / buttons */
+"儲存" = "Save";
+"取消" = "Cancel";
+"刪除" = "Delete";
+"刪除訂閱" = "Delete subscription";
+"切換" = "Switch";
+"完成" = "Done";
+"好" = "OK";
+"清除" = "Clear";
+"關閉" = "Close";
+"連線" = "Connect";
+"中斷連線" = "Disconnect";
+"中斷所有活躍連線" = "Close all active connections";
+"全部中斷" = "Close all";
+"前往下載" = "Download";
+"匯入" = "Import";
+"匯入備份…" = "Import backup…";
+"匯入節點或訂閱" = "Import node or subscription";
+"匯出備份…" = "Export backup…";
+"從剪貼簿匯入" = "Import from clipboard";
+"自動辨識剪貼簿中的節點連結或訂閱網址" = "Auto-detect node links or subscription URLs in the clipboard";
+"掃描剪貼簿 QR" = "Scan QR from clipboard";
+"貼上連結匯入…" = "Paste link to import…";
+"貼上分享連結，或手動填寫節點資料" = "Paste a share link, or fill in node details manually";
+"手動新增" = "Add manually";
+"手動新增節點" = "Add node manually";
+"手動新增節點…" = "Add node manually…";
+"手動貼上…" = "Paste manually…";
+"新增" = "Add";
+"新增群組" = "Add group";
+"新增群組…" = "Add group…";
+"新增規則" = "Add rule";
+"編輯…" = "Edit…";
+"編輯節點" = "Edit node";
+"編輯群組" = "Edit group";
+"編輯規則" = "Edit rule";
+"測延遲" = "Test latency";
+"對所有節點做 TCP 延遲測試" = "TCP latency test for all nodes";
+"更新" = "Update";
+"更新訂閱" = "Update subscription";
+"重新抓取所有訂閱" = "Refresh all subscriptions";
+"複製" = "Copy";
+"複製全部" = "Copy all";
+"複製分享連結" = "Copy share link";
+"複製圖片" = "Copy image";
+"複製連結" = "Copy link";
+"顯示 QR Code…" = "Show QR code…";
+"使用此節點" = "Use this node";
+"使用此群組" = "Use this group";
+"自訂…" = "Custom…";
+"開啟主視窗" = "Open main window";
+"更多節點請開啟主視窗…" = "Open the main window for more nodes…";
+"結束 ShadowSpace" = "Quit ShadowSpace";
+
+/* Rules */
+"型別" = "Type";
+"類型" = "Type";
+"比對值" = "Match value";
+"逗號分隔可一次填多個，例如：youtube.com, ytimg.com" = "Comma-separate to add several at once, e.g. youtube.com, ytimg.com";
+"分應用分流需開啟 TUN 模式才能依程序比對；系統代理模式下此規則不會生效。" = "Per-app routing requires TUN mode to match by process; this rule has no effect in system-proxy mode.";
+"自訂規則在「規則」模式下生效；「程序名稱」類型需開啟 TUN 模式才能比對。" = "Custom rules apply in Rule mode; the Process name type requires TUN mode to match.";
+"自訂規則（由上而下比對，可拖曳排序）" = "Custom rules (matched top to bottom, drag to reorder)";
+"還沒有自訂規則。點右上角「＋」新增，例如讓特定網站永遠直連或拒絕。" = "No custom rules yet. Tap + at the top right to add one — e.g. always direct or reject a specific site.";
+
+/* Groups / relay */
+"中轉節點" = "Relay node";
+"節點鏈" = "Node chain";
+"先經中轉節點再連到本節點，形成「中轉 → 落地」鏈路。" = "Route through a relay node first, forming a relay → exit chain.";
+"無（直接連線）" = "None (direct)";
+"手動在成員節點中選擇出口。" = "Manually choose the exit among member nodes.";
+"自動測速，永遠走成員中最快的節點。" = "Auto speed test; always uses the fastest member node.";
+"例如：香港、自動測速" = "e.g. Hong Kong, Auto";
+
+/* Empty / helper states */
+"我的節點" = "My nodes";
+"還沒有節點" = "No nodes yet";
+"複製節點分享連結或機場訂閱網址後，點下方按鈕匯入。" = "Copy a node share link or provider subscription URL, then tap the button below to import.";
+"支援 ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// 分享連結、WireGuard .conf 設定檔、base64 內容，或 http(s) 訂閱網址，可一次貼多行。" = "Supports ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// share links, WireGuard .conf files, base64 content, or http(s) subscription URLs — paste multiple lines at once.";
+"篩選目標 / 規則 / 節點" = "Filter target / rule / node";
+"尚無日誌" = "No logs yet";
+"連線後，核心引擎的執行紀錄會顯示在這裡。" = "Once connected, the core engine's runtime logs appear here.";
+"連線後，這裡會即時顯示每條連線命中的規則與出口節點。" = "Once connected, each connection's matched rule and exit node appear here in real time.";
+"自動捲動" = "Auto-scroll";
+"自動捲動到最新日誌" = "Auto-scroll to latest log";
+"用 Shadowrocket 等 App 掃描即可匯入" = "Scan with apps like Shadowrocket to import";
+"此節點無法產生分享連結" = "This node can't generate a share link";
+
+/* Update intervals */
+"每 6 小時" = "Every 6 hours";
+"每 12 小時" = "Every 12 hours";
+"每 24 小時" = "Every 24 hours";
+
+/* Toasts / alerts */
+"出了點問題" = "Something went wrong";
+"已切換引擎，重新連線後生效" = "Engine switched; takes effect after reconnecting";
+"已匯出備份" = "Backup exported";
+"已複製分享連結" = "Share link copied";
+"日誌已複製" = "Logs copied";
+
+/* Misc values */
+"無" = "None";
+"預設" = "Default";
+"未知版本" = "Unknown version";
+
+/* Enum labels — modes / status / rule types / policies / group types / engine.
+   "規則" reuses the Nodes-tab key (-> "Rules"). */
+"全域" = "Global";
+"直連" = "Direct";
+"未連線" = "Not connected";
+"連線中…" = "Connecting…";
+"已連線" = "Connected";
+"正在中斷…" = "Disconnecting…";
+"網域後綴" = "Domain suffix";
+"網域關鍵字" = "Domain keyword";
+"完整網域" = "Exact domain";
+"IP 區段" = "IP range";
+"GeoIP 國家" = "GeoIP country";
+"Geosite 分類" = "Geosite category";
+"程序名稱" = "Process name";
+"規則集 URL" = "Rule-set URL";
+"代理" = "Proxy";
+"拒絕" = "Reject";
+"手動選擇" = "Manual";
+"自動（最快）" = "Auto (fastest)";
+"sing-box（完整）" = "sing-box (full)";
+"原生（App Store）" = "Native (App Store)";

@@ -35,6 +35,10 @@ app: build
 		cp Resources/AppIcon.icns $(APP_BUNDLE)/Contents/Resources/AppIcon.icns; \
 		echo "已套用 App 圖示"; \
 	fi
+	@if [ -d Localizations ]; then \
+		cp -R Localizations/*.lproj $(APP_BUNDLE)/Contents/Resources/ 2>/dev/null; \
+		echo "已內嵌在地化（en / zh-Hant）"; \
+	fi
 	@if [ -f vendor/sing-box ]; then \
 		mkdir -p $(APP_BUNDLE)/Contents/Resources/bin; \
 		cp vendor/sing-box $(APP_BUNDLE)/Contents/Resources/bin/sing-box; \
