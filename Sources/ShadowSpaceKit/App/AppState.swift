@@ -82,6 +82,14 @@ final class AppState: ObservableObject {
         return nodes.first?.name ?? "—"
     }
 
+    /// 系統代理需繞過的主機：所有節點的伺服器位址。
+    /// 避免引擎連往代理伺服器的流量又被系統代理繞回本機代理埠（= 引擎自己）形成迴圈。
+    var proxyServerHosts: [String] {
+        Array(Set(nodes.map { $0.server }.filter {
+            !$0.trimmingCharacters(in: .whitespaces).isEmpty
+        }))
+    }
+
     /// 把選定出口解析成實際節點（群組 → 第一個成員節點）。原生 / App Store 引擎用。
     var resolvedNode: ProxyNode? {
         if let id = selectedNodeID {
@@ -266,7 +274,7 @@ final class AppState: ObservableObject {
 
             // TUN 模式由引擎接管路由，不需要動系統代理
             if !settings.tunMode && settings.autoSystemProxy {
-                try SystemProxyManager.enable(port: settings.mixedPort)
+                try SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
                 systemProxyActive = true
             }
 
@@ -330,7 +338,7 @@ final class AppState: ObservableObject {
             nativeEngine = eng
 
             if settings.autoSystemProxy {
-                try SystemProxyManager.enable(port: settings.mixedPort)
+                try SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
                 systemProxyActive = true
             }
             nativeLastUp = 0; nativeLastDown = 0
