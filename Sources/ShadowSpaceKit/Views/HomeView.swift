@@ -107,7 +107,20 @@ struct HomeView: View {
     private var nodeCard: some View {
         GroupBox {
             HStack(spacing: 10) {
-                if let node = state.selectedNode {
+                if let group = state.selectedGroup {
+                    Image(systemName: group.type.icon)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name).fontWeight(.medium).lineLimit(1)
+                        Text("\(group.type.displayName) · \(group.memberNodeIDs.count) 個節點")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    outboundSwitchMenu
+                } else if let node = state.selectedNode {
                     ProtocolBadge(proto: node.proto)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(node.name).fontWeight(.medium).lineLimit(1)
@@ -118,27 +131,50 @@ struct HomeView: View {
                     }
                     Spacer()
                     LatencyBadge(ms: state.latencies[node.id])
-                    Menu("切換") {
-                        ForEach(state.nodes) { candidate in
-                            Button {
-                                state.selectNode(candidate.id)
-                            } label: {
-                                if candidate.id == state.selectedNode?.id {
-                                    Label(candidate.name, systemImage: "checkmark")
-                                } else {
-                                    Text(candidate.name)
-                                }
-                            }
-                        }
-                    }
-                    .fixedSize()
+                    outboundSwitchMenu
                 }
             }
             .padding(6)
         } label: {
-            Text("目前節點").foregroundStyle(.secondary)
+            Text("目前出口").foregroundStyle(.secondary)
         }
         .frame(maxWidth: 460)
+    }
+
+    private var outboundSwitchMenu: some View {
+        Menu("切換") {
+            if !state.groups.isEmpty {
+                Section("群組") {
+                    ForEach(state.groups) { group in
+                        Button {
+                            state.selectNode(group.id)
+                        } label: {
+                            if group.id == state.selectedNodeID {
+                                Label(group.name, systemImage: "checkmark")
+                            } else {
+                                Text(group.name)
+                            }
+                        }
+                    }
+                }
+            }
+            if !state.nodes.isEmpty {
+                Section("節點") {
+                    ForEach(state.nodes) { candidate in
+                        Button {
+                            state.selectNode(candidate.id)
+                        } label: {
+                            if candidate.id == state.selectedNodeID {
+                                Label(candidate.name, systemImage: "checkmark")
+                            } else {
+                                Text(candidate.name)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .fixedSize()
     }
 
     // MARK: - 流量卡片

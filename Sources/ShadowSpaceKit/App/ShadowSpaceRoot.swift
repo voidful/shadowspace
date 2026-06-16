@@ -18,41 +18,11 @@ public struct ShadowSpaceRoot: App {
         .defaultSize(width: 780, height: 540)
 
         MenuBarExtra {
-            MenuBarView()
-                .environmentObject(state)
+            MenuBarView(state: state)
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: menuBarSymbol)
-                if let trafficText = menuBarTrafficText {
-                    Text(trafficText)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .monospacedDigit()
-                }
-            }
-            .accessibilityLabel(menuBarStatusText)
+            MenuBarStatusLabel(state: state)
         }
-        .menuBarExtraStyle(.menu)
-    }
-
-    /// 選單列圖示隨 VPN 狀態變化：實心紙飛機＝已連線、空心＝未連線
-    private var menuBarSymbol: String {
-        switch state.connectionState {
-        case .connected: return "paperplane.fill"
-        case .connecting, .stopping: return "paperplane.circle"
-        case .disconnected: return "paperplane"
-        }
-    }
-
-    private var menuBarTrafficText: String? {
-        guard state.connectionState == .connected else { return nil }
-        return "↓ \(state.downRate.menuBarRateString) ↑ \(state.upRate.menuBarRateString)"
-    }
-
-    private var menuBarStatusText: String {
-        guard state.connectionState == .connected else {
-            return "ShadowSpace：\(state.connectionState.label)"
-        }
-        return "ShadowSpace：已連線，下載 \(state.downRate.rateString)，上傳 \(state.upRate.rateString)"
+        .menuBarExtraStyle(.window)
     }
 }
 

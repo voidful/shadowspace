@@ -70,16 +70,22 @@ final class AppState: ObservableObject {
 #endif
 
     var selectedNode: ProxyNode? {
-        nodes.first { $0.id == selectedNodeID } ?? nodes.first
+        if let id = selectedNodeID {
+            return nodes.first { $0.id == id }
+        }
+        return nodes.first
+    }
+
+    var selectedGroup: ProxyGroup? {
+        guard let id = selectedNodeID else { return nil }
+        return groups.first { $0.id == id }
     }
 
     /// 目前選定出口的名稱（可能是節點或群組）。
     var selectedOutboundName: String {
-        if let id = selectedNodeID {
-            if let n = nodes.first(where: { $0.id == id }) { return n.name }
-            if let g = groups.first(where: { $0.id == id }) { return g.name }
-        }
-        return nodes.first?.name ?? "—"
+        if let group = selectedGroup { return group.name }
+        if let node = selectedNode { return node.name }
+        return "—"
     }
 
     /// 系統代理需繞過的主機：所有節點的伺服器位址。
@@ -223,6 +229,7 @@ final class AppState: ObservableObject {
             errorMessage = "還沒有任何節點。先到「節點」分頁貼上分享連結或訂閱，馬上就能連線。"
             return
         }
+        normalizeSelectedOutbound()
         connectionState = .connecting
 
 #if APP_STORE
@@ -244,10 +251,6 @@ final class AppState: ObservableObject {
                 }
                 engineVersion = EngineManager.version()
                 engineInstallStatus = nil
-            }
-
-            if selectedNodeID == nil || !nodes.contains(where: { $0.id == selectedNodeID }) {
-                selectedNodeID = nodes.first?.id
             }
 
             let result = SingBoxConfigBuilder.build(
@@ -496,6 +499,7 @@ final class AppState: ObservableObject {
     }
 
     func selectNode(_ id: UUID) {
+        guard isSelectableOutbound(id) else { return }
         selectedNodeID = id
         save()
         guard connectionState == .connected else { return }
@@ -669,7 +673,7 @@ final class AppState: ObservableObject {
             subscriptions[index].lastUpdated = Date()
             subscriptions[index].rawUserInfo = result.userInfo
             // 盡量保住原本選的節點（依名稱比對）
-            if !nodes.contains(where: { $0.id == selectedNodeID }) {
+            if !isSelectableOutbound(selectedNodeID) {
                 selectedNodeID = nodes.first { $0.name == oldSelectedName }?.id ?? nodes.first?.id
             }
             save()
@@ -706,7 +710,7 @@ final class AppState: ObservableObject {
     func deleteSubscription(_ id: UUID) {
         subscriptions.removeAll { $0.id == id }
         nodes.removeAll { $0.subscriptionID == id }
-        if !nodes.contains(where: { $0.id == selectedNodeID }) {
+        if !isSelectableOutbound(selectedNodeID) {
             selectedNodeID = nodes.first?.id
         }
         save()
@@ -716,7 +720,7 @@ final class AppState: ObservableObject {
         nodes.removeAll { $0.id == id }
         latencies.removeValue(forKey: id)
         for i in groups.indices { groups[i].memberNodeIDs.removeAll { $0 == id } }
-        if selectedNodeID == id {
+        if !isSelectableOutbound(selectedNodeID) {
             selectedNodeID = nodes.first?.id
         }
         save()
@@ -900,6 +904,7 @@ final class AppState: ObservableObject {
         settings = p.settings
         mode = p.mode
         selectedNodeID = p.selectedNodeID
+        normalizeSelectedOutbound()
         save()
         toastMessage = "已匯入備份（\(p.nodes.count) 節點、\(p.groups.count) 群組）"
         return true
@@ -952,5 +957,15 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
         }
 #endif
+    }
+
+    private func isSelectableOutbound(_ id: UUID?) -> Bool {
+        guard let id else { return false }
+        return nodes.contains { $0.id == id } || groups.contains { $0.id == id }
+    }
+
+    private func normalizeSelectedOutbound() {
+        guard !isSelectableOutbound(selectedNodeID) else { return }
+        selectedNodeID = nodes.first?.id ?? groups.first?.id
     }
 }
