@@ -14,7 +14,7 @@
 "App Store 版使用 Apple NetworkExtension 透明代理，不包含 sing-box 子程序、TUN 管理員授權或系統代理改寫。支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）。" = "The App Store edition uses Apple NetworkExtension transparent proxy — no sing-box subprocess, TUN admin authorisation, or system-proxy changes. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss).";
 "App Store 版使用原生代理核心與 NetworkExtension，不包含外部代理核心或管理員授權流程。" = "The App Store edition uses a native proxy core with NetworkExtension — no external proxy core or admin authorisation flow.";
 "原生 NetworkExtension" = "Native NetworkExtension";
-"原生引擎純 Apple 框架、可上 App Store，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整（Developer ID 發佈版）。" = "The native engine uses pure Apple frameworks and is App Store-eligible. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss); no Reality / Hysteria2 / TUIC / VMess / TUN. The sing-box engine is full-featured (Developer ID build).";
+"原生引擎純 Apple 框架、不依賴外部核心，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整。" = "The native engine uses pure Apple frameworks with no external core. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss); no Reality / Hysteria2 / TUIC / VMess / TUN. The sing-box engine is full-featured.";
 "核心引擎使用開源專案 sing-box（GPLv3），以獨立子程序方式執行。" = "The core engine uses the open-source sing-box (GPLv3), run as a separate subprocess.";
 "代理引擎" = "Proxy engine";
 "引擎" = "Engine";
@@ -251,4 +251,4 @@
 "手動選擇" = "Manual";
 "自動（最快）" = "Auto (fastest)";
 "sing-box（完整）" = "sing-box (full)";
-"原生（App Store）" = "Native (App Store)";
+"原生" = "Native";

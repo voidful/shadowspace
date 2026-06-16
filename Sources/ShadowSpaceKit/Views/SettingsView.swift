@@ -63,7 +63,7 @@ struct SettingsView: View {
             } header: {
                 Text("引擎")
             } footer: {
-                Text("原生引擎純 Apple 框架、可上 App Store，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整（Developer ID 發佈版）。")
+                Text("原生引擎純 Apple 框架、不依賴外部核心，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整。")
                     .font(.caption).foregroundStyle(.secondary)
             }
 #endif

@@ -1,7 +1,7 @@
 # ShadowCore — 全原生代理核心
 
 純 Apple 框架（Network.framework + CryptoKit + CommonCrypto）實作的代理核心，**不依賴 sing-box**。
-目的：讓 ShadowSpace 能走 App Store 路線（沙箱 + NetworkExtension，且無 GPLv3 授權衝突）。
+目的：讓 ShadowSpace 不必下載或內嵌外部核心即可代理，啟動輕量，且無 GPLv3 授權牽連。
 
 ## 支援矩陣
 
@@ -22,7 +22,7 @@
   自行實作 HTTP/2（HPACK + 框架 + 流量控制）工程量比 VMess 更大。**WebSocket 已涵蓋多數 CDN 傳輸需求**，故不做。
 - **WireGuard**：L3 VPN（需處理 IP 封包 + userspace TCP/IP stack），與本核心 flow 式代理架構不合；走 sing-box 引擎（已支援）。
 
-> 需要上述協議的使用者，請改用 Developer ID 發佈版（內嵌 sing-box，功能完整）。
+> 需要上述協議的使用者，請在「設定」切換到 sing-box 引擎（功能完整）。
 
 ## 尚未實作（可行但暫緩）
 

@@ -272,7 +272,7 @@ enum EngineKind: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .singbox: return String(localized: "sing-box（完整）")
-        case .native: return String(localized: "原生（App Store）")
+        case .native: return String(localized: "原生")
         }
     }
 }
@@ -295,7 +295,7 @@ struct AppSettings: Codable {
     var localDNS = "223.5.5.5"
     /// 訂閱自動更新間隔（小時，0 = 關閉）
     var subAutoUpdateHours = 0
-    /// 代理引擎：sing-box（完整）或 native（純原生，App Store 相容）
+    /// 代理引擎：sing-box（完整）或 native（純原生）
     var engineKind: EngineKind = .native
     /// 拉取訂閱時的 User-Agent（機場常依此決定回傳格式）
     var subscriptionUA = "sing-box/1.13.13"

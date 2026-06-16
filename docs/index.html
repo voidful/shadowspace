@@ -30,7 +30,7 @@
       <nav class="nav-links" aria-label="頁面區塊">
         <a href="#download">下載</a>
         <a href="#features">功能</a>
-        <a href="#routes">版本差異</a>
+        <a href="#routes">引擎差異</a>
         <a href="https://github.com/voidful/shadowspace">GitHub</a>
       </nav>
     </header>
@@ -140,31 +140,31 @@
 
       <section class="section section-muted" id="routes" aria-labelledby="routes-title">
         <div class="section-inner">
-          <p class="section-kicker">Distribution Routes</p>
-          <h2 id="routes-title">兩條發佈路線，各自保持清楚</h2>
+          <p class="section-kicker">Built-in Engines</p>
+          <h2 id="routes-title">一個 App，兩種可切換的代理引擎</h2>
           <div class="route-grid">
             <article class="route-card">
-              <h3>Developer ID 直發版</h3>
+              <h3>sing-box 完整引擎</h3>
               <p>
-                適合需要完整協議、TUN、系統代理控制、GeoIP / Geosite 與 DNS 分流的使用者。
-                目前下載的 DMG 就是這條完整路線。
+                需要完整協議、TUN、系統代理控制、GeoIP / Geosite 與 DNS 分流時使用，
+                功能最完整。
               </p>
               <ul>
                 <li>Shadowsocks、VMess、VLESS、Trojan、Hysteria2、TUIC、AnyTLS、SOCKS5、WireGuard</li>
-                <li>可用 sing-box 完整引擎與 TUN 增強模式</li>
-                <li>Developer ID 簽章與 Apple 公證</li>
+                <li>TUN 增強模式可接管終端機、Docker 等流量</li>
+                <li>內嵌或自動下載官方 sing-box 核心</li>
               </ul>
             </article>
             <article class="route-card">
-              <h3>Mac App Store 版</h3>
+              <h3>原生引擎</h3>
               <p>
-                為沙箱與審查相容另外準備的原生透明代理路線，不混入外部核心、
-                管理員 TUN 或系統代理修改流程。
+                純 Apple 框架實作的 ShadowCore，不依賴外部核心，
+                啟動輕量，適合日常常用節點。
               </p>
               <ul>
-                <li>以 ShadowCore 與 NetworkExtension 為核心</li>
-                <li>支援 Shadowsocks、Trojan、VLESS、SOCKS5 等原生路徑</li>
-                <li>功能範圍比直發版保守，保持 App Store 相容性</li>
+                <li>支援 Shadowsocks、Trojan、VLESS、SOCKS5（含 ws/wss）</li>
+                <li>TLS 分片抗封鎖，干擾 DPI 的 SNI 偵測</li>
+                <li>不需下載外部核心或管理員授權</li>
               </ul>
             </article>
           </div>
