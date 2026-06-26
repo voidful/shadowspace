@@ -19,6 +19,7 @@ public final class WSStream: ByteStream, @unchecked Sendable {
             ? TLSTransport.parameters(sni: sni ?? hostHeader ?? host, insecure: insecure,
                                       alpn: nil, fragment: fragment, queue: queue)
             : .tcp
+        params.disablingSystemProxy()   // 出站不遵循系統代理，避免自迴圈（tls 路徑已設，重設無妨）
         params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 
         let scheme = tls ? "wss" : "ws"

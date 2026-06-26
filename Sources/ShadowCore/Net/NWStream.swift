@@ -28,6 +28,7 @@ public final class NWStream: ByteStream, @unchecked Sendable {
         } else {
             params = .tcp
         }
+        params.disablingSystemProxy()   // 出站不遵循系統代理，避免自迴圈
         let endpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: port) ?? .any)

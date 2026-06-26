@@ -20,7 +20,7 @@ public final class NWDatagramSession: DatagramSession, @unchecked Sendable {
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: port) ?? .any
         )
-        self.connection = NWConnection(to: endpoint, using: .udp)
+        self.connection = NWConnection(to: endpoint, using: NWParameters.udp.disablingSystemProxy())
         self.queue = queue
     }
 

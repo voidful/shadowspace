@@ -30,7 +30,7 @@ public enum TLSTransport {
             let framerOptions = NWProtocolFramer.Options(definition: TLSFragmentFramer.definition)
             params.defaultProtocolStack.applicationProtocols.append(framerOptions)
         }
-        return params
+        return params.disablingSystemProxy()   // 出站不遵循系統代理，避免自迴圈
     }
 
     public static func dial(host: String, port: UInt16,
