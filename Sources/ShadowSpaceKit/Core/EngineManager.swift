@@ -108,9 +108,17 @@ final class EngineManager {
         return firstLine.replacingOccurrences(of: "sing-box version ", with: "")
     }
 
+    /// 清掉先前殘留的引擎子程序（上次強制結束/閃退時可能留下的孤兒），避免新引擎啟動時埠衝突。
+    /// 只殺「我們自己安裝目錄下」那支 sing-box，比對完整安裝路徑，不動使用者其他用途的 sing-box。
+    /// 註：TUN/特權模式的 root 引擎由「哨兵 + 看門狗」自行收掉（pkill 以一般權限殺不掉 root 程序）。
+    static func killOrphans() {
+        runProcess(URL(fileURLWithPath: "/usr/bin/pkill"), ["-f", installedBinaryURL.path])
+    }
+
     // MARK: - 一般模式啟動
 
     func start(configData: Data) throws {
+        Self.killOrphans()   // 先清掉孤兒引擎，避免埠衝突導致「開不起來」
         let bin = try prepare(configData: configData)
 
         let proc = Process()
@@ -151,6 +159,7 @@ final class EngineManager {
     // MARK: - TUN 特權模式啟動
 
     func startPrivileged(configData: Data) throws {
+        Self.killOrphans()   // 清掉非特權的孤兒引擎（root 引擎由看門狗自收）
         let bin = try prepare(configData: configData)
         let work = Self.privilegedWorkDir
         let pidFile = work.appendingPathComponent("engine.pid")

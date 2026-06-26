@@ -145,6 +145,7 @@ final class AppState: ObservableObject {
                 self.handleUnexpectedExit(status: status)
             }
         }
+        reconcileSystemStateOnLaunch()
 #endif
         // 訂閱自動更新：啟動後與每 30 分鐘檢查一次是否到期
         autoUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { _ in
@@ -218,6 +219,13 @@ final class AppState: ObservableObject {
     /// On-demand：網路從無到有，且開了自動連線、目前斷線、有節點 → 自動連線。
     private func handleNetworkChange(satisfied: Bool) {
         defer { lastNetSatisfied = satisfied }
+#if !APP_STORE
+        // 主要網路服務可能變了（例如 Wi-Fi↔乙太網路）：連線中且用系統代理時，
+        // 把代理重新套到新的主要服務上（enable 會先清舊的再設新的），代理才跟得上。
+        if satisfied, connectionState == .connected, systemProxyActive, !settings.tunMode {
+            try? SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
+        }
+#endif
         guard settings.autoConnect, satisfied, !lastNetSatisfied else { return }
         guard connectionState == .disconnected, !nodes.isEmpty else { return }
         Task { await connect() }
@@ -442,6 +450,19 @@ final class AppState: ObservableObject {
             trafficHistory.removeFirst(trafficHistory.count - Self.trafficWindow)
         }
     }
+
+#if !APP_STORE
+    /// 啟動校正：上次若強制結束/閃退，可能殘留「系統代理開著」與「孤兒引擎」，
+    /// UI 卻顯示未連線。一律回到乾淨的「未連線」狀態，避免「開關不乾淨」。
+    private func reconcileSystemStateOnLaunch() {
+        guard connectionState == .disconnected else { return }
+        EngineManager.killOrphans()
+        if SystemProxyManager.residualProxyDetected() {
+            SystemProxyManager.disable()
+            appendLog("[啟動] 偵測到上次殘留的系統代理，已清除並還原網路設定")
+        }
+    }
+#endif
 
     /// App 結束前的同步清理：還原系統代理、停掉引擎
     func cleanupOnTerminate() {
