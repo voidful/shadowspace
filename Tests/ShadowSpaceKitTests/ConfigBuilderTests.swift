@@ -92,6 +92,50 @@ final class ConfigBuilderTests: XCTestCase {
         XCTAssertEqual(utls?["fingerprint"] as? String, "chrome")
     }
 
+    func testDefaultUTLSFingerprintApplied() {
+        // TLS 節點未帶 fp → 套用預設瀏覽器指紋（抗 JA3 / 主動探測，對齊 Shadowrocket）
+        var node = ProxyNode(name: "v", proto: .vless, server: "x.com", port: 443)
+        node.uuid = "u"; node.tls = true
+        let ob = SingBoxConfigBuilder.outbound(for: node, tag: "v", defaultFingerprint: "chrome")
+        let utls = (ob["tls"] as? [String: Any])?["utls"] as? [String: Any]
+        XCTAssertEqual(utls?["enabled"] as? Bool, true)
+        XCTAssertEqual(utls?["fingerprint"] as? String, "chrome")
+    }
+
+    func testExplicitFingerprintOverridesDefault() {
+        var node = ProxyNode(name: "t", proto: .trojan, server: "x.com", port: 443)
+        node.password = "pw"; node.tls = true; node.fingerprint = "safari"
+        let ob = SingBoxConfigBuilder.outbound(for: node, tag: "t", defaultFingerprint: "chrome")
+        let utls = (ob["tls"] as? [String: Any])?["utls"] as? [String: Any]
+        XCTAssertEqual(utls?["fingerprint"] as? String, "safari")
+    }
+
+    func testDefaultUTLSDisabledWhenEmpty() {
+        var node = ProxyNode(name: "v", proto: .vless, server: "x.com", port: 443)
+        node.uuid = "u"; node.tls = true
+        let ob = SingBoxConfigBuilder.outbound(for: node, tag: "v", defaultFingerprint: "")
+        XCTAssertNil((ob["tls"] as? [String: Any])?["utls"], "空字串 = 不套用 uTLS")
+    }
+
+    func testDefaultUTLSNotAppliedToQUIC() {
+        // hysteria2（QUIC）即使 tls=true 也不該注入 uTLS（uTLS 僅適用 TLS-over-TCP）
+        var node = ProxyNode(name: "h", proto: .hysteria2, server: "x.com", port: 443)
+        node.password = "pw"; node.tls = true
+        let ob = SingBoxConfigBuilder.outbound(for: node, tag: "h", defaultFingerprint: "chrome")
+        XCTAssertNil((ob["tls"] as? [String: Any])?["utls"], "QUIC 協議不套用 uTLS")
+    }
+
+    func testBuildAppliesDefaultFingerprintEndToEnd() {
+        // 端到端：預設 settings（tlsFingerprint=chrome）下，TLS 節點的 outbound 應帶 uTLS chrome
+        let a = makeNode(name: "n")   // trojan + tls，未帶 fp
+        let result = SingBoxConfigBuilder.build(
+            nodes: [a], selectedID: a.id, settings: AppSettings(), mode: .rule)
+        let outbounds = result.json["outbounds"] as? [[String: Any]] ?? []
+        let node = outbounds.first { ($0["tag"] as? String) == "n" }
+        let utls = (node?["tls"] as? [String: Any])?["utls"] as? [String: Any]
+        XCTAssertEqual(utls?["fingerprint"] as? String, "chrome")
+    }
+
     func testWSEarlyDataPath() {
         var node = ProxyNode(name: "ws", proto: .vmess, server: "x.com", port: 443)
         node.uuid = "u"

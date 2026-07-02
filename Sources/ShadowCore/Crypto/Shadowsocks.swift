@@ -55,7 +55,9 @@ public enum ShadowsocksCrypto {
 
     public static func randomSalt(_ length: Int) -> Data {
         var bytes = [UInt8](repeating: 0, count: length)
-        _ = SecRandomCopyBytes(kSecRandomDefault, length, &bytes)
+        guard SecRandomCopyBytes(kSecRandomDefault, length, &bytes) == errSecSuccess else {
+            fatalError("SecRandomCopyBytes 失敗：拒絕以可預測 salt 出站")   // fail-closed
+        }
         return Data(bytes)
     }
 }

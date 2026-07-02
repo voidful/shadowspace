@@ -3,24 +3,33 @@ import Network
 
 /// VLESS 串流：TLS/TCP 之上，首次送出 VLESS 請求標頭，首次讀取時解析回應標頭，之後純轉送。
 /// 注意 VLESS 的位址型別與 SOCKS 不同：1=IPv4、2=網域、3=IPv6。
+/// flow=xtls-rprx-vision 時，載荷（標頭之後）改經 VisionConn 做 padding/裸傳切換（抗 TLS-in-TLS）。
 public final class VlessStream: ByteStream, @unchecked Sendable {
     private let under: ByteStream
     private let header: Data
+    private let vision: VisionConn?
     private var headerSent = false
     private var responseParsed = false
     private var respBuf = Data()
 
-    public init(under: ByteStream, uuid: Data, target: Target) {
+    public init(under: ByteStream, uuid: Data, target: Target, flowVision: Bool = false) {
         self.under = under
-        self.header = Self.buildRequest(uuid: uuid, target: target)
+        self.header = Self.buildRequest(uuid: uuid, target: target, vision: flowVision)
+        self.vision = flowVision ? VisionConn(under: under, uuid: uuid) : nil
     }
 
-    /// version(0) ‖ uuid(16) ‖ addonLen(0) ‖ cmd(1=tcp) ‖ port(2,BE) ‖ atyp ‖ addr
-    public static func buildRequest(uuid: Data, target: Target) -> Data {
+    /// version(0) ‖ uuid(16) ‖ addonLen ‖ addon ‖ cmd(1=tcp) ‖ port(2,BE) ‖ atyp ‖ addr
+    /// vision=true 時 addon = 0x12 ‖ 0A 10 "xtls-rprx-vision"；否則 addonLen=0。
+    public static func buildRequest(uuid: Data, target: Target, vision: Bool = false) -> Data {
         var d = Data()
         d.append(0x00)
         d.append(uuid)
-        d.append(0x00)
+        if vision {
+            d.append(UInt8(Vision.visionAddon.count))   // 0x12 (18)
+            d.append(contentsOf: Vision.visionAddon)
+        } else {
+            d.append(0x00)
+        }
         d.append(0x01)
         d.append(UInt8(target.port >> 8))
         d.append(UInt8(target.port & 0xff))
@@ -53,12 +62,21 @@ public final class VlessStream: ByteStream, @unchecked Sendable {
     public func sendHeader() async throws {
         guard !headerSent else { return }
         headerSent = true
-        try await under.write(header)
+        if let vision {
+            // 標頭（明文）+ 首個 padding frame 合併於一次寫出，藏 VLESS 標頭大小
+            try await under.write(header + vision.makeInitialFrame())
+        } else {
+            try await under.write(header)   // VLESS 標頭恆為明文
+        }
     }
 
     public func write(_ data: Data) async throws {
         try await sendHeader()
-        try await under.write(data)
+        if let vision {
+            try await vision.write(data)
+        } else {
+            try await under.write(data)
+        }
     }
 
     public func read() async throws -> Data {
@@ -79,8 +97,13 @@ public final class VlessStream: ByteStream, @unchecked Sendable {
             responseParsed = true
             let payload = Data(respBuf.dropFirst(need))   // 標頭後剩餘 = 載荷
             respBuf = Data()
+            if let vision {
+                if !payload.isEmpty { vision.feedInitialRead(payload) }
+                return try await vision.read()
+            }
             if !payload.isEmpty { return payload }
         }
+        if let vision { return try await vision.read() }
         return try await under.read()
     }
 
@@ -92,9 +115,10 @@ public struct VlessOutbound: Outbound {
     private let server: Target
     private let uuid: Data
     private let transport: TransportConfig
+    private let flowVision: Bool
 
     public init?(name: String, host: String, port: UInt16, uuid: String,
-                 transport: TransportConfig = TransportConfig(tls: true)) {
+                 transport: TransportConfig = TransportConfig(tls: true), flow: String? = nil) {
         guard let uuidData = VlessStream.parseUUID(uuid) else { return nil }
         self.name = name
         self.server = Target(host: host, port: port)
@@ -102,12 +126,13 @@ public struct VlessOutbound: Outbound {
         var t = transport
         if t.tls && t.sni == nil { t.sni = host }
         self.transport = t
+        self.flowVision = (flow == "xtls-rprx-vision")
     }
 
     public func connect(to target: Target, queue: DispatchQueue) async throws -> ByteStream {
         let under = try await Transport.dial(host: server.host, port: server.port,
                                              config: transport, queue: queue)
-        let stream = VlessStream(under: under, uuid: uuid, target: target)
+        let stream = VlessStream(under: under, uuid: uuid, target: target, flowVision: flowVision)
         try await stream.sendHeader()
         return stream
     }

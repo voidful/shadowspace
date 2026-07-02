@@ -50,6 +50,16 @@ struct SettingsView: View {
                 }
                 if state.settings.engineKind == .native {
                     Toggle(isOn: Binding(
+                        get: { state.settings.nativeTLS },
+                        set: { state.settings.nativeTLS = $0; state.saveAndApply() }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("原生 TLS 指紋偽裝（抗封鎖）")
+                            Text("以自建 TLS 1.3 客戶端取代系統 TLS，把 ClientHello 偽裝成瀏覽器（macOS 26+ 送後量子指紋）。套用於 Trojan / VLESS 的 TCP+TLS；ws/wss 仍走系統 TLS。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: Binding(
                         get: { state.settings.tlsFragment },
                         set: { state.settings.tlsFragment = $0; state.saveAndApply() }
                     )) {
@@ -60,10 +70,30 @@ struct SettingsView: View {
                         }
                     }
                 }
+                // 指紋選擇器：sing-box 引擎，或原生引擎已開啟原生 TLS 時皆適用
+                if state.settings.engineKind == .singbox
+                    || (state.settings.engineKind == .native && state.settings.nativeTLS) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Picker("TLS 指紋偽裝（uTLS）", selection: Binding(
+                            get: { state.settings.tlsFingerprint },
+                            set: { state.settings.tlsFingerprint = $0; state.saveAndApply() }
+                        )) {
+                            Text("Chrome").tag("chrome")
+                            Text("Safari").tag("safari")
+                            Text("Firefox").tag("firefox")
+                            Text("Edge").tag("edge")
+                            Text("iOS").tag("ios")
+                            Text("隨機").tag("randomized")
+                            Text("關閉").tag("")
+                        }
+                        Text("把外層 TLS ClientHello 偽裝成瀏覽器，抗 JA3 指紋與主動探測（對應 Shadowrocket 的作法）。原生引擎目前以 Chrome 指紋實作。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("引擎")
             } footer: {
-                Text("原生引擎純 Apple 框架、不依賴外部核心，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）；不支援 Reality / Hysteria2 / TUIC / VMess / TUN。sing-box 引擎功能完整。")
+                Text("原生引擎純 Apple 框架、不依賴外部核心，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss），並可自建 TLS 1.3 偽裝瀏覽器指紋；尚不支援 Reality / XTLS Vision / Hysteria2 / TUIC / VMess / TUN——這些請改用 sing-box 引擎。")
                     .font(.caption).foregroundStyle(.secondary)
             }
 #endif

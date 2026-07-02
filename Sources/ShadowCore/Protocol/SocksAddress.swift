@@ -48,6 +48,32 @@ public enum SocksAddress {
         return Target(host: host, port: port)
     }
 
+    /// 從位元組緩衝解析一個 SOCKS5 位址（UDP body / SOCKS UDP 標頭用）。回傳 target 與下一個 offset；不足回 nil。
+    public static func parse(_ b: [UInt8], at off: Int) -> (target: Target, next: Int)? {
+        guard off < b.count else { return nil }
+        let atyp = b[off]
+        var i = off + 1
+        let host: String
+        switch atyp {
+        case 0x01:
+            guard i + 4 <= b.count else { return nil }
+            host = b[i..<i + 4].map(String.init).joined(separator: "."); i += 4
+        case 0x04:
+            guard i + 16 <= b.count else { return nil }
+            host = ipv6String(Data(b[i..<i + 16])); i += 16
+        case 0x03:
+            guard i < b.count else { return nil }
+            let len = Int(b[i]); i += 1
+            guard i + len <= b.count else { return nil }
+            host = String(decoding: b[i..<i + len], as: UTF8.self); i += len
+        default:
+            return nil
+        }
+        guard i + 2 <= b.count else { return nil }
+        let port = UInt16(b[i]) << 8 | UInt16(b[i + 1]); i += 2
+        return (Target(host: host, port: port), i)
+    }
+
     private static func ipv6String(_ raw: Data) -> String {
         var parts: [String] = []
         var i = raw.startIndex

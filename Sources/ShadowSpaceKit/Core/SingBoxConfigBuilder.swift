@@ -121,7 +121,8 @@ enum SingBoxConfigBuilder {
                 endpoints.append(wireguardEndpoint(for: node, tag: tagByNodeID[node.id]!))
             } else {
                 let detour = node.dialerNodeID.flatMap { tagByNodeID[$0] }
-                outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!, detour: detour))
+                outbounds.append(outbound(for: node, tag: tagByNodeID[node.id]!, detour: detour,
+                                          defaultFingerprint: settings.tlsFingerprint))
             }
         }
         outbounds.append(["type": "direct", "tag": directTag])
@@ -353,7 +354,8 @@ enum SingBoxConfigBuilder {
         return endpoint
     }
 
-    static func outbound(for node: ProxyNode, tag: String, detour: String? = nil) -> [String: Any] {
+    static func outbound(for node: ProxyNode, tag: String, detour: String? = nil,
+                         defaultFingerprint: String? = nil) -> [String: Any] {
         var ob: [String: Any] = [
             "tag": tag,
             "server": node.server,
@@ -406,7 +408,15 @@ enum SingBoxConfigBuilder {
             ]
             if node.insecure { tls["insecure"] = true }
             if let alpn = node.alpn, !alpn.isEmpty { tls["alpn"] = alpn }
-            if let fp = node.fingerprint {
+            // uTLS 指紋：節點自帶 fp 優先；否則對 TLS-over-TCP 協議套用預設瀏覽器指紋
+            // （抗 JA3 指紋分類，且 REALITY 本就需要 uTLS）。QUIC 協議（hysteria2/tuic）不套用。
+            let supportsUTLS: Bool
+            switch node.proto {
+            case .vless, .trojan, .vmess, .anytls: supportsUTLS = true
+            default: supportsUTLS = false
+            }
+            let fallbackFP = (supportsUTLS && !(defaultFingerprint ?? "").isEmpty) ? defaultFingerprint : nil
+            if let fp = node.fingerprint ?? fallbackFP {
                 tls["utls"] = ["enabled": true, "fingerprint": fp]
             }
             if let pbk = node.realityPublicKey, !pbk.isEmpty {

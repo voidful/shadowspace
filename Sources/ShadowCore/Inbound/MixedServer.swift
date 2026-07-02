@@ -54,7 +54,13 @@ public final class MixedServer: @unchecked Sendable {
             var isConnect = true
             var initialToRemote = Data()
             if first[0] == 0x05 {
-                target = try await Socks5Handler.readRequest(client)
+                let req = try await Socks5Handler.readRequest(client)
+                if req.command == .udpAssociate {
+                    // UDP ASSOCIATE：開 UDP relay，控制連線關閉前不返回
+                    try await UDPAssociate.run(client: client, listenHost: host, route: route, queue: queue)
+                    return
+                }
+                target = req.target
             } else {
                 let parsed = try await HttpProxyHandler.readRequest(client, prefix: first)
                 target = parsed.target

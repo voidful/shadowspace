@@ -301,6 +301,12 @@ struct AppSettings: Codable {
     var subscriptionUA = "sing-box/1.13.13"
     /// TLS ClientHello 分片（原生引擎，抗封鎖）
     var tlsFragment = false
+    /// uTLS 指紋：sing-box 引擎於節點未帶 fp 時套用；原生引擎的自建 TLS 1.3 客戶端亦用它決定 ClientHello 指紋
+    /// （chrome/safari/firefox/edge/ios/randomized…），抗 JA3 指紋與主動探測。空字串 = sing-box 不套用。
+    var tlsFingerprint = "chrome"
+    /// 原生引擎：以自建 TLS 1.3 客戶端（可控 ClientHello、瀏覽器指紋，macOS 26+ 送後量子 X25519MLKEM768）
+    /// 取代 Apple NWProtocolTLS，僅套用於 Trojan / VLESS 的 TCP+TLS 路徑（WS/wss 仍走系統 TLS）。
+    var nativeTLS = true
     /// 偵測到網路可用時自動連線（On-demand）
     var autoConnect = false
     /// Kill switch：引擎意外停止時保留系統代理以阻擋流量外洩
@@ -313,7 +319,7 @@ struct AppSettings: Codable {
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
-        case subscriptionUA, tlsFragment, autoConnect, killSwitch, autoCheckUpdates
+        case subscriptionUA, tlsFragment, tlsFingerprint, nativeTLS, autoConnect, killSwitch, autoCheckUpdates
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -333,6 +339,8 @@ struct AppSettings: Codable {
         engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .native
         subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? "sing-box/1.13.13"
         tlsFragment = try c.decodeIfPresent(Bool.self, forKey: .tlsFragment) ?? false
+        tlsFingerprint = try c.decodeIfPresent(String.self, forKey: .tlsFingerprint) ?? "chrome"
+        nativeTLS = try c.decodeIfPresent(Bool.self, forKey: .nativeTLS) ?? true
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         autoCheckUpdates = try c.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true

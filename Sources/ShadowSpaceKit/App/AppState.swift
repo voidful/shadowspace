@@ -340,7 +340,9 @@ final class AppState: ObservableObject {
             return
         }
         do {
-            let outbound = try NativeEngineAdapter.outbound(for: node, fragment: settings.tlsFragment)
+            let outbound = try NativeEngineAdapter.outbound(
+                for: node, fragment: settings.tlsFragment,
+                nativeTLS: settings.nativeTLS, fingerprint: settings.tlsFingerprint)
             let router = NativeEngineAdapter.makeRouter(proxy: outbound, rules: rules, mode: mode)
             let listenHost = settings.allowLAN ? "0.0.0.0" : "127.0.0.1"
             let eng = NativeEngine(listenHost: listenHost,

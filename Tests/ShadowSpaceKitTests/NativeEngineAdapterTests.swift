@@ -33,6 +33,58 @@ final class NativeEngineAdapterTests: XCTestCase {
         reality.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
         reality.realityPublicKey = "PBK"
         XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: reality))
+
+        // 未知 flow 仍須報錯（native 只支援 xtls-rprx-vision）
+        var badFlow = ProxyNode(name: "bad", proto: .vless, server: "x", port: 443)
+        badFlow.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+        badFlow.tls = true
+        badFlow.flow = "xtls-rprx-origin"
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: badFlow))
+    }
+
+    func testVisionAndRealitySupported() throws {
+        // M3：flow=xtls-rprx-vision 現在受支援（不再 throw）
+        var vision = ProxyNode(name: "vis", proto: .vless, server: "x.com", port: 443)
+        vision.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+        vision.tls = true
+        vision.flow = "xtls-rprx-vision"
+        XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: vision))
+
+        // M2：REALITY（有效 pbk）受支援
+        var reality = ProxyNode(name: "r", proto: .vless, server: "x.com", port: 443)
+        reality.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+        reality.tls = true
+        reality.realityPublicKey = Data(repeating: 7, count: 32).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        reality.realityShortID = "01ab"
+        reality.flow = "xtls-rprx-vision"   // REALITY + Vision 一起
+        XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: reality))
+    }
+
+    func testNativeTLSPropagatesToTransport() {
+        // Trojan（TCP+TLS）：nativeTLS 與指紋應傳入 TransportConfig
+        var trojan = ProxyNode(name: "t", proto: .trojan, server: "x.com", port: 443)
+        trojan.password = "pw"; trojan.tls = true
+        let cfg = NativeEngineAdapter.transport(for: trojan, defaultTLS: true, nativeTLS: true, fingerprint: "chrome")
+        XCTAssertTrue(cfg.nativeTLS)
+        XCTAssertEqual(cfg.fingerprint, "chrome")
+        XCTAssertEqual(cfg.network, .tcp)
+
+        // 節點自帶 fp 優先於全域預設
+        var withFP = trojan; withFP.fingerprint = "safari"
+        XCTAssertEqual(NativeEngineAdapter.transport(for: withFP, defaultTLS: true, nativeTLS: true, fingerprint: "chrome").fingerprint, "safari")
+
+        // 關閉時不啟用
+        XCTAssertFalse(NativeEngineAdapter.transport(for: trojan, defaultTLS: true, nativeTLS: false, fingerprint: "chrome").nativeTLS)
+    }
+
+    func testDefaultNativeTLSEnabled() {
+        // 依「開起來」的決定，AppSettings.nativeTLS 預設開；舊設定檔缺此鍵時也回 true
+        XCTAssertTrue(AppSettings().nativeTLS)
+        let legacy = "{}".data(using: .utf8)!
+        let decoded = try? JSONDecoder().decode(AppSettings.self, from: legacy)
+        XCTAssertEqual(decoded?.nativeTLS, true)
     }
 
     func testTransportWS() {

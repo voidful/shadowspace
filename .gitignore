@@ -23,6 +23,8 @@ ExportOptions*.plist
 .swiftpm/
 .idea/
 .claude/
+.aixlarity/
+cache.db
 
 # App Store Connect / review materials kept local because they can contain
 # account details, support contacts, screenshots, compliance answers,

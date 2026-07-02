@@ -12,12 +12,23 @@ enum NativeEngineAdapter {
     }
 
     /// ProxyNode → ShadowCore.Outbound。不支援的協議/特性丟出清楚的錯誤。
-    static func outbound(for node: ProxyNode, fragment: Bool = false) throws -> Outbound {
+    /// nativeTLS：Trojan/VLESS 的 TCP+TLS 改走自建 TLS 1.3（瀏覽器指紋）；fingerprint：指紋預設。
+    static func outbound(for node: ProxyNode, fragment: Bool = false,
+                         nativeTLS: Bool = false, fingerprint: String? = nil) throws -> Outbound {
         let host = node.server
         let port = UInt16(clamping: node.port)
 
         switch node.proto {
         case .shadowsocks:
+            // SS-2022（2022-blake3-*）：BLAKE3 + base64 PSK，走專屬串流
+            if let m = SS2022Method(node.method ?? "") {
+                guard let outbound = SS2022Outbound(
+                    name: node.name, host: host, port: port,
+                    method: node.method ?? "", password: node.password ?? "") else {
+                    throw AdapterError.unsupported("SS-2022 PSK 格式錯誤（需 base64，解碼後 \(m.keySize) bytes）")
+                }
+                return outbound
+            }
             guard let outbound = ShadowsocksOutbound(
                 name: node.name, host: host, port: port,
                 method: node.method ?? "aes-256-gcm", password: node.password ?? "") else {
@@ -28,15 +39,27 @@ enum NativeEngineAdapter {
         case .trojan:
             return TrojanOutbound(name: node.name, host: host, port: port,
                                   password: node.password ?? "",
-                                  transport: transport(for: node, defaultTLS: true, fragment: fragment))
+                                  transport: transport(for: node, defaultTLS: true, fragment: fragment,
+                                                       nativeTLS: nativeTLS, fingerprint: fingerprint))
 
         case .vless:
-            if node.realityPublicKey?.isEmpty == false {
-                throw AdapterError.unsupported("原生引擎不支援 VLESS Reality，請改用 sing-box 引擎")
+            // flow：支援 xtls-rprx-vision（M3）；其餘未知 flow 仍擋
+            if let flow = node.flow, !flow.isEmpty, flow != "xtls-rprx-vision" {
+                throw AdapterError.unsupported("原生引擎不支援 VLESS flow「\(flow)」，請改用 sing-box 引擎")
+            }
+            // REALITY：以自建 TLS 1.3 + REALITY 認證出站
+            var reality: RealityClientConfig? = nil
+            if let pbk = node.realityPublicKey, !pbk.isEmpty {
+                guard let rc = RealityClientConfig(publicKeyString: pbk, shortIDHex: node.realityShortID ?? "") else {
+                    throw AdapterError.unsupported("REALITY 公鑰（pbk）或 short-id（sid）格式錯誤")
+                }
+                reality = rc
             }
             guard let outbound = VlessOutbound(
                 name: node.name, host: host, port: port, uuid: node.uuid ?? "",
-                transport: transport(for: node, defaultTLS: node.tls, fragment: fragment)) else {
+                transport: transport(for: node, defaultTLS: node.tls, fragment: fragment,
+                                     nativeTLS: nativeTLS, fingerprint: fingerprint, reality: reality),
+                flow: node.flow) else {
                 throw AdapterError.unsupported("VLESS UUID 格式錯誤")
             }
             return outbound
@@ -58,13 +81,18 @@ enum NativeEngineAdapter {
         }
     }
 
-    static func transport(for node: ProxyNode, defaultTLS: Bool, fragment: Bool = false) -> TransportConfig {
+    static func transport(for node: ProxyNode, defaultTLS: Bool, fragment: Bool = false,
+                          nativeTLS: Bool = false, fingerprint: String? = nil,
+                          reality: RealityClientConfig? = nil) -> TransportConfig {
         var config = TransportConfig()
-        config.tls = node.tls || defaultTLS
+        config.tls = node.tls || defaultTLS || reality != nil
         config.sni = node.sni
         config.insecure = node.insecure
         config.alpn = node.alpn
         config.fragment = fragment && config.tls   // 只有 TLS 連線才需要分片
+        config.reality = reality
+        config.nativeTLS = nativeTLS || reality != nil   // REALITY 必走自建 TLS（Apple TLS 無法做）
+        config.fingerprint = node.fingerprint ?? fingerprint
         if node.network == "ws" {
             config.network = .ws
             config.wsPath = node.wsPath ?? "/"

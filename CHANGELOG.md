@@ -2,6 +2,23 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.4.0
+
+### 新增（原生引擎抗封鎖堆疊，純 Apple 框架、零 sing-box）
+- **自建 TLS 1.3 客戶端**：以 CryptoKit 在原始 TCP 上實作可控 ClientHello 的 TLS 1.3，
+  取代不可自訂握手的 `NWProtocolTLS`，把外層握手偽裝成瀏覽器指紋；macOS 26+ 送現代 Chrome
+  的後量子 X25519MLKEM768 混合金鑰。金鑰排程對 RFC 8448 測試向量逐 byte 驗證。原生引擎
+  預設對 Trojan / VLESS 的 TCP+TLS 啟用（可於設定關閉），並提供指紋選擇（Chrome/Safari…）。
+- **REALITY**：原生支援 VLESS REALITY（authKey 衍生、session_id 認證封裝、HMAC-SHA512 憑證
+  驗證），抗主動探測。
+- **XTLS Vision**：原生支援 `flow=xtls-rprx-vision`（padding / TLS-in-TLS 過濾 / direct 切換），
+  打散內層握手的長度與時序特徵。
+- **Shadowsocks-2022**：原生支援 `2022-blake3-aes-128/256-gcm`（TCP 與 AES 系 UDP），含純 Swift
+  BLAKE3（對官方測試向量驗證）。
+- **原生 UDP 子系統**：SOCKS5 UDP ASSOCIATE 入站 + UDP relay，支援 Direct 與 SS-2022 UDP 出站，
+  讓原生引擎可代理 UDP（QUIC/HTTP3、DNS 等）。
+- sing-box 引擎：TLS 節點未指定指紋時預設套用 uTLS `chrome`，對齊 Shadowrocket 的抗指紋作法。
+
 ## v0.3.2
 
 ### 修正
