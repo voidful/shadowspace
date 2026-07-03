@@ -43,9 +43,9 @@ enum NativeEngineAdapter {
                                                        nativeTLS: nativeTLS, fingerprint: fingerprint))
 
         case .vless:
-            // flow：支援 xtls-rprx-vision（M3）；其餘未知 flow 仍擋
-            if let flow = node.flow, !flow.isEmpty, flow != "xtls-rprx-vision" {
-                throw AdapterError.unsupported("原生引擎不支援 VLESS flow「\(flow)」，請改用 sing-box 引擎")
+            // flow（含 XTLS Vision）：原生實作尚未對真機驗證、會破壞資料流，暫一律不支援 → 交回 sing-box。
+            if let flow = node.flow, !flow.isEmpty {
+                throw AdapterError.unsupported("原生引擎暫不支援 VLESS flow「\(flow)」（含 XTLS Vision），已改用 sing-box 引擎")
             }
             // REALITY：以自建 TLS 1.3 + REALITY 認證出站
             var reality: RealityClientConfig? = nil

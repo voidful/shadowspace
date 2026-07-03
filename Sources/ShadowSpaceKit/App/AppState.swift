@@ -245,8 +245,13 @@ final class AppState: ObservableObject {
         return
 #else
         if settings.engineKind == .native {
-            await connectNative()
-            return
+            // 原生引擎能處理此節點才用它；否則（XTLS Vision / Hysteria2 / Reality-with-flow…）自動改用 sing-box，
+            // 避免選到原生不支援的節點時連上卻無法通訊（表現為「打開就當機」）。
+            if let node = resolvedNode, NativeEngineAdapter.isSupported(node) {
+                await connectNative()
+                return
+            }
+            engineLog = ["[原生引擎] 此節點需要原生尚未支援的功能，已自動改用 sing-box 引擎"]
         }
 
         do {

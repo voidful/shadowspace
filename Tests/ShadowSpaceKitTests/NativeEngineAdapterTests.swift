@@ -42,15 +42,16 @@ final class NativeEngineAdapterTests: XCTestCase {
         XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: badFlow))
     }
 
-    func testVisionAndRealitySupported() throws {
-        // M3：flow=xtls-rprx-vision 現在受支援（不再 throw）
+    func testVisionRejectedRealityFlowlessSupported() throws {
+        // XTLS Vision（flow）原生實作會破壞資料流、暫不支援 → 交回 sing-box（isSupported=false）
         var vision = ProxyNode(name: "vis", proto: .vless, server: "x.com", port: 443)
         vision.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
         vision.tls = true
         vision.flow = "xtls-rprx-vision"
-        XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: vision))
+        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: vision))
+        XCTAssertFalse(NativeEngineAdapter.isSupported(vision))
 
-        // M2：REALITY（有效 pbk）受支援
+        // flow-less REALITY（有效 pbk）仍受支援
         var reality = ProxyNode(name: "r", proto: .vless, server: "x.com", port: 443)
         reality.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
         reality.tls = true
@@ -58,8 +59,8 @@ final class NativeEngineAdapterTests: XCTestCase {
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
         reality.realityShortID = "01ab"
-        reality.flow = "xtls-rprx-vision"   // REALITY + Vision 一起
         XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: reality))
+        XCTAssertTrue(NativeEngineAdapter.isSupported(reality))
     }
 
     func testNativeTLSPropagatesToTransport() {

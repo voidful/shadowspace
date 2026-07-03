@@ -2,6 +2,14 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.4.1
+
+### 修正
+- **修復連上 VLESS XTLS Vision（`flow=xtls-rprx-vision`）節點後所有流量損毀、系統網路卡死（「打開就當機」）的問題**：
+  原生引擎的 Vision 實作尚未對真機驗證、會破壞資料流，已暫停用。改為在連線時，原生引擎不支援的節點
+  （XTLS Vision / Hysteria2 / TUIC 等）自動改用 sing-box 引擎，避免「連上卻通不了」。原生支援的節點
+  （ws / SS / SS-2022 / Trojan / flow-less REALITY）仍走原生引擎。
+
 ## v0.4.0
 
 ### 新增（原生引擎抗封鎖堆疊，純 Apple 框架、零 sing-box）
@@ -12,7 +20,7 @@
 - **REALITY**：原生支援 VLESS REALITY（authKey 衍生、session_id 認證封裝、HMAC-SHA512 憑證
   驗證），抗主動探測。
 - **XTLS Vision**：原生支援 `flow=xtls-rprx-vision`（padding / TLS-in-TLS 過濾 / direct 切換），
-  打散內層握手的長度與時序特徵。
+  打散內層握手的長度與時序特徵。（v0.4.1 因互通問題暫停用，改由 sing-box 處理。）
 - **Shadowsocks-2022**：原生支援 `2022-blake3-aes-128/256-gcm`（TCP 與 AES 系 UDP），含純 Swift
   BLAKE3（對官方測試向量驗證）。
 - **原生 UDP 子系統**：SOCKS5 UDP ASSOCIATE 入站 + UDP relay，支援 Direct 與 SS-2022 UDP 出站，
