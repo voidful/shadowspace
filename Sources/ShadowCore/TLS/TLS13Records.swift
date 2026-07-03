@@ -90,6 +90,18 @@ final class TLS13RecordLayer {
         writeCipher = cipher; writeKey = SymmetricKey(data: key); writeIV = iv; writeSeq = 0
     }
 
+    /// XTLS Vision splice 用：不解密，直接回傳原始 TCP 位元組。先吐已緩衝、未消化的 inbuf
+    /// （可能是裸串流的開頭），再讀底層 TCP。切 splice 後外層 TLS 對此方向即被繞過。
+    func rawRead() async throws -> Data {
+        if !inbuf.isEmpty { let d = inbuf; inbuf = Data(); return d }
+        return try await under.read()
+    }
+
+    /// XTLS Vision splice 用：不加密，直接把位元組寫到底層 TCP。
+    func rawWrite(_ data: Data) async throws {
+        try await under.write(data)
+    }
+
     private func readExactly(_ n: Int) async throws -> Data {
         while inbuf.count < n {
             let chunk = try await under.read()

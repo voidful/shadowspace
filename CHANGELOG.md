@@ -2,6 +2,17 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.4.2
+
+### 修正
+- **原生 XTLS Vision（`flow=xtls-rprx-vision`）完整可用**：修復切換後資料流損毀、HTTP/2 與大檔傳輸失敗的問題。
+  XTLS Vision 在偵測到內層 TLS 握手完成後，會切換為 **TLS splice**——之後兩個方向都裸傳內層 TLS record、
+  繞過外層 TLS（避免雙重加密）。先前原生實作在切換後仍以外層 TLS 讀寫，導致上行/下行資料錯位（外層解密
+  失敗、內層 record MAC 錯誤），表現為「HTTP/1.1 小回應僥倖可用、HTTP/2 與大檔下載/上傳全損」。現已在自建
+  TLS 1.3 上實作**對稱 splice**（切 Direct 後改讀/寫原始 TCP），vision 節點恢復由原生引擎處理。
+  已對本機與真實節點逐 byte 驗證：h1/h2、雙向 128 KB、108 KB 檔上傳下載皆無誤。vision 一律走 nativeTLS
+  （splice 依賴自建 TLS，Apple `NWProtocolTLS` 無法配合）。
+
 ## v0.4.1
 
 ### 修正
@@ -20,7 +31,7 @@
 - **REALITY**：原生支援 VLESS REALITY（authKey 衍生、session_id 認證封裝、HMAC-SHA512 憑證
   驗證），抗主動探測。
 - **XTLS Vision**：原生支援 `flow=xtls-rprx-vision`（padding / TLS-in-TLS 過濾 / direct 切換），
-  打散內層握手的長度與時序特徵。（v0.4.1 因互通問題暫停用，改由 sing-box 處理。）
+  打散內層握手的長度與時序特徵。（v0.4.1 因互通問題暫停用；v0.4.2 補上 TLS splice 後恢復原生處理。）
 - **Shadowsocks-2022**：原生支援 `2022-blake3-aes-128/256-gcm`（TCP 與 AES 系 UDP），含純 Swift
   BLAKE3（對官方測試向量驗證）。
 - **原生 UDP 子系統**：SOCKS5 UDP ASSOCIATE 入站 + UDP relay，支援 Direct 與 SS-2022 UDP 出站，

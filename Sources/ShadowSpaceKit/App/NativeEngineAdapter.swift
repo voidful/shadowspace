@@ -43,9 +43,10 @@ enum NativeEngineAdapter {
                                                        nativeTLS: nativeTLS, fingerprint: fingerprint))
 
         case .vless:
-            // flow（含 XTLS Vision）：原生實作尚未對真機驗證、會破壞資料流，暫一律不支援 → 交回 sing-box。
-            if let flow = node.flow, !flow.isEmpty {
-                throw AdapterError.unsupported("原生引擎暫不支援 VLESS flow「\(flow)」（含 XTLS Vision），已改用 sing-box 引擎")
+            let isVision = (node.flow == "xtls-rprx-vision")
+            // 原生僅支援 flow-less 與 xtls-rprx-vision；其他 flow（如 xtls-rprx-origin）交回 sing-box。
+            if let flow = node.flow, !flow.isEmpty, !isVision {
+                throw AdapterError.unsupported("原生引擎不支援 VLESS flow「\(flow)」（僅支援 xtls-rprx-vision），已改用 sing-box 引擎")
             }
             // REALITY：以自建 TLS 1.3 + REALITY 認證出站
             var reality: RealityClientConfig? = nil
@@ -55,10 +56,13 @@ enum NativeEngineAdapter {
                 }
                 reality = rc
             }
+            // XTLS Vision 的 direct 切換依賴自建 TLS 1.3 的 splice（裸傳內層 record、繞過外層 TLS），
+            // Apple NWProtocolTLS 無法配合，故 vision 一律走 nativeTLS。
+            let vlessNativeTLS = isVision ? true : nativeTLS
             guard let outbound = VlessOutbound(
                 name: node.name, host: host, port: port, uuid: node.uuid ?? "",
                 transport: transport(for: node, defaultTLS: node.tls, fragment: fragment,
-                                     nativeTLS: nativeTLS, fingerprint: fingerprint, reality: reality),
+                                     nativeTLS: vlessNativeTLS, fingerprint: fingerprint, reality: reality),
                 flow: node.flow) else {
                 throw AdapterError.unsupported("VLESS UUID 格式錯誤")
             }

@@ -235,8 +235,15 @@ public final class NativeTLS13Client: ByteStream, @unchecked Sendable {
 
     // MARK: - ByteStream（握手後的應用資料）
 
+    /// XTLS Vision splice：切 Direct 後，該方向不再走外層 TLS，直接讀/寫原始 TCP。
+    private var readSplice = false
+    private var writeSplice = false
+    public func enterReadSplice() { readSplice = true }
+    public func enterWriteSplice() { writeSplice = true }
+
     public func read() async throws -> Data {
         if !appBuffer.isEmpty { let d = appBuffer; appBuffer = Data(); return d }
+        if readSplice { return try await records.rawRead() }
         while true {
             let (t, payload) = try await records.readRecord()
             switch t {
@@ -270,6 +277,7 @@ public final class NativeTLS13Client: ByteStream, @unchecked Sendable {
     }
 
     public func write(_ data: Data) async throws {
+        if writeSplice { try await records.rawWrite(data); return }
         let maxRecord = 16384
         var idx = data.startIndex
         while idx < data.endIndex {

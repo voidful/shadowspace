@@ -15,6 +15,11 @@ enum Vision {
     static let commandEnd: UInt8 = 0x01
     static let commandDirect: UInt8 = 0x02
 
+    static let debugEnabled = ProcessInfo.processInfo.environment["VISION_DEBUG"] != nil
+    static func dbg(_ s: @autoclosure () -> String) {
+        if debugEnabled { FileHandle.standardError.write(Data(("[Vision] " + s() + "\n").utf8)) }
+    }
+
     static let bufSize = 8192
     static let tls13SupportedVersions: [UInt8] = [0x00, 0x2b, 0x00, 0x02, 0x03, 0x04]
 
@@ -117,6 +122,7 @@ enum Vision {
                 s.numberOfPacketToFilter = 0
             }
         }
+        dbg("filter head=\([UInt8](data.prefix(6)).map { String(format: "%02x", $0) }.joined()) len=\(data.count) isTLS=\(s.isTLS) isTLS12=\(s.isTLS12orAbove) eXtls=\(s.enableXtls) cipher=\(String(s.cipher, radix: 16)) nOP=\(s.numberOfPacketToFilter) remSH=\(s.remainingServerHello)")
     }
 
     private static func contains(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
@@ -135,7 +141,8 @@ final class VisionState {
     let uuid: Data                       // 16 bytes
     let testseed: [UInt32]
 
-    // 共用（filter）
+    // 共用（filter）——read（下行）與 write（上行）兩個並發 task 都會存取，需 filterLock 保護
+    let filterLock = NSLock()
     var numberOfPacketToFilter = 8
     var isTLS = false
     var isTLS12orAbove = false
@@ -188,29 +195,43 @@ public final class VisionConn: ByteStream, @unchecked Sendable {
     // MARK: write（uplink，padding）
 
     public func write(_ data: Data) async throws {
-        if state.writerDirect { try await under.write(data); return }
-        if state.numberOfPacketToFilter > 0 { Vision.filterTls(data, state) }
-        guard state.isPadding else { try await under.write(data); return }   // padding 已結束 → 裸傳
+        if state.writerDirect {
+            Vision.dbg("W direct raw \(data.count)B")
+            try await under.write(data); return
+        }
+        // 共享 filter 狀態在鎖內更新並快照，避免與並發的 read（下行）filter 競態
+        let (isTLS, isTLS12, eXtls, nOP): (Bool, Bool, Bool, Int) = state.filterLock.withLock {
+            if state.numberOfPacketToFilter > 0 { Vision.filterTls(data, state) }
+            return (state.isTLS, state.isTLS12orAbove, state.enableXtls, state.numberOfPacketToFilter)
+        }
+        Vision.dbg("W in=\(data.count)B head=\([UInt8](data.prefix(3)).map { String(format: "%02x", $0) }.joined()) isTLS=\(isTLS) isTLS12=\(isTLS12) eXtls=\(eXtls) isPadding=\(state.isPadding) complete=\(Vision.isCompleteRecord(data))")
+        guard state.isPadding else {
+            Vision.dbg("W padding-ended raw \(data.count)B")
+            try await under.write(data); return
+        }   // padding 已結束 → 裸傳
 
         let isComplete = Vision.isCompleteRecord(data)
         let chunks = Vision.reshape(data)
-        var longPadding = state.isTLS
+        var longPadding = isTLS
         var out = Data()
         var goDirect = false
         var i = 0
         while i < chunks.count {
             let b = chunks[i]
             let isLast = (i == chunks.count - 1)
-            if state.isTLS && b.count >= 6 && b.prefix(3) == Data([0x17, 0x03, 0x03]) && isComplete {
-                if state.enableXtls { goDirect = true }
+            if isTLS && b.count >= 6 && b.prefix(3) == Data([0x17, 0x03, 0x03]) && isComplete {
+                // 首個內層 application_data record → 結束 padding 並（XTLS 時）切 Direct/splice。
+                // Direct（2）讓伺服器對此連線兩個方向都改為 TLS splice：裸傳內層 record、繞過外層 TLS。
+                // 伺服器本就會依自身偵測 splice 下行，上行也須配合裸傳，否則上行資料錯位/遺失。
+                if eXtls { goDirect = true }
                 var command = Vision.commandContinue
-                if isLast { command = state.enableXtls ? Vision.commandDirect : Vision.commandEnd }
+                if isLast { command = eXtls ? Vision.commandDirect : Vision.commandEnd }
                 out.append(Vision.padding(content: b, command: command, uuid: &state.writeOnceUUID, longPadding: true, testseed: state.testseed))
                 state.isPadding = false
                 longPadding = false
                 i += 1
                 continue
-            } else if !state.isTLS12orAbove && state.numberOfPacketToFilter <= 1 {
+            } else if !isTLS12 && nOP <= 1 {
                 // 相容較早的接收端：提前一包結束 padding
                 state.isPadding = false
                 out.append(Vision.padding(content: b, command: Vision.commandEnd, uuid: &state.writeOnceUUID, longPadding: longPadding, testseed: state.testseed))
@@ -218,21 +239,26 @@ public final class VisionConn: ByteStream, @unchecked Sendable {
                 break   // 其餘塊裸傳
             }
             var command = Vision.commandContinue
-            if isLast && !state.isPadding { command = state.enableXtls ? Vision.commandDirect : Vision.commandEnd }
+            if isLast && !state.isPadding { command = eXtls ? Vision.commandDirect : Vision.commandEnd }
             out.append(Vision.padding(content: b, command: command, uuid: &state.writeOnceUUID, longPadding: longPadding, testseed: state.testseed))
             i += 1
         }
         while i < chunks.count { out.append(chunks[i]); i += 1 }   // break 後剩餘塊裸傳
-        try await under.write(out)
-        if goDirect { state.writerDirect = true }
+        try await under.write(out)   // 含 command-2 區塊，仍走外層 TLS（padding 藏內層握手）
+        Vision.dbg("W emitted \(out.count)B goDirect=\(goDirect) isPadding=\(state.isPadding)")
+        if goDirect {
+            // 切 Direct 後，上行後續 record 裸傳（繞過外層 TLS），與伺服器 splice 對稱
+            under.enterWriteSplice()
+            state.writerDirect = true
+        }
     }
 
     // MARK: read（downlink，unpadding）
 
     public func read() async throws -> Data {
         if state.readerDirect {
-            if !readBuf.isEmpty { let d = readBuf; readBuf = Data(); return d }
-            return try await under.read()
+            if !readBuf.isEmpty { let d = readBuf; readBuf = Data(); Vision.dbg("R direct(buf) \(d.count)B head=\([UInt8](d.prefix(5)).map { String(format: "%02x", $0) }.joined())"); return d }
+            let r = try await under.read(); Vision.dbg("R direct \(r.count)B head=\([UInt8](r.prefix(5)).map { String(format: "%02x", $0) }.joined())"); return r
         }
         while true {
             // 初始態：需 ≥21 bytes 且以 UserUUID 開頭才進入 padding 解析
@@ -299,14 +325,21 @@ public final class VisionConn: ByteStream, @unchecked Sendable {
             } else if state.remainingContent > 0 || state.remainingPadding > 0 || state.currentCommand == 0 {
                 state.withinPaddingBuffers = true
             } else if state.currentCommand == 1 {
+                // End：伺服器僅結束 padding，之後仍走外層 TLS（不 splice）
                 state.withinPaddingBuffers = false; state.readerDirect = true
             } else if state.currentCommand == 2 {
+                // Direct：伺服器切 TLS splice，之後裸傳內層 record，繞過外層 TLS。
+                // 通知底層外層 TLS：此方向後續 read() 改回傳原始 TCP 位元組。
                 state.withinPaddingBuffers = false; state.readerDirect = true
+                under.enterReadSplice()
             }
-            if state.numberOfPacketToFilter > 0 && !out.isEmpty { Vision.filterTls(out, state) }
+            if state.numberOfPacketToFilter > 0 && !out.isEmpty {
+                state.filterLock.withLock { Vision.filterTls(out, state) }
+            }
+            Vision.dbg("R block cmd=\(state.currentCommand) content=\(out.count)B tail=\(terminalTail.count)B direct=\(state.readerDirect) contHead=\([UInt8](out.prefix(5)).map { String(format: "%02x", $0) }.joined()) tailHead=\([UInt8](terminalTail.prefix(5)).map { String(format: "%02x", $0) }.joined())")
             if !terminalTail.isEmpty { out.append(terminalTail) }
             if !out.isEmpty { return out }
-            if state.readerDirect { return try await under.read() }
+            if state.readerDirect { let r = try await under.read(); Vision.dbg("R direct raw \(r.count)B head=\([UInt8](r.prefix(5)).map { String(format: "%02x", $0) }.joined())"); return r }
             // 只吃到 padding、無內容 → 繼續讀
         }
     }

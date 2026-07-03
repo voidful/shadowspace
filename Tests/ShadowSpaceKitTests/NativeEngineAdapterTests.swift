@@ -42,14 +42,18 @@ final class NativeEngineAdapterTests: XCTestCase {
         XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: badFlow))
     }
 
-    func testVisionRejectedRealityFlowlessSupported() throws {
-        // XTLS Vision（flow）原生實作會破壞資料流、暫不支援 → 交回 sing-box（isSupported=false）
+    func testVisionSupportedRealityFlowlessSupported() throws {
+        // XTLS Vision（flow=xtls-rprx-vision）原生支援（TLS splice）→ isSupported=true
         var vision = ProxyNode(name: "vis", proto: .vless, server: "x.com", port: 443)
         vision.uuid = "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
         vision.tls = true
         vision.flow = "xtls-rprx-vision"
-        XCTAssertThrowsError(try NativeEngineAdapter.outbound(for: vision))
-        XCTAssertFalse(NativeEngineAdapter.isSupported(vision))
+        XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: vision))
+        XCTAssertTrue(NativeEngineAdapter.isSupported(vision))
+
+        // vision 依賴自建 TLS 的 splice，須強制走 nativeTLS（即使全域關閉）
+        let visCfg = NativeEngineAdapter.transport(for: vision, defaultTLS: true, nativeTLS: false, fingerprint: "chrome")
+        _ = visCfg   // transport() 本身不含 flow 判斷；nativeTLS 強制在 outbound(for:) 內，故此處僅確保可建立
 
         // flow-less REALITY（有效 pbk）仍受支援
         var reality = ProxyNode(name: "r", proto: .vless, server: "x.com", port: 443)
