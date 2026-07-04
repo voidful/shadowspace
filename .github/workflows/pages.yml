@@ -1,0 +1,41 @@
+name: Deploy site to Pages
+
+# 只在網站內容（docs/）或此 workflow 變更時部署，避免每次程式碼推送都觸發部署。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 全域單一並發群組、且不取消進行中的部署：把多次推送的部署排隊逐一完成，
+# 根治舊有「Deploy from a branch」在連續推送時並發衝突導致的
+# 「Deployment failed, try again later」。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload docs/ artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
