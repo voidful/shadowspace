@@ -17,19 +17,20 @@ struct LogsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(state.engineLog.enumerated()), id: \.offset) { index, line in
-                                Text(line)
+                            ForEach(state.engineLog) { line in
+                                Text(line.text)
                                     .font(.caption.monospaced())
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(index)
+                                    .id(line.id)
                             }
                         }
                         .padding(12)
                     }
-                    .onChange(of: state.engineLog.count) { _, count in
-                        if autoScroll, count > 0 {
-                            proxy.scrollTo(count - 1, anchor: .bottom)
+                    // 追蹤最後一行的 id 而非 count——環形緩衝裁剪後 count 恆為 800、永不觸發。
+                    .onChange(of: state.engineLog.last?.id) { _, id in
+                        if autoScroll, let id {
+                            proxy.scrollTo(id, anchor: .bottom)
                         }
                     }
                 }
@@ -43,8 +44,7 @@ struct LogsView: View {
                 }
                 .help("自動捲動到最新日誌")
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(state.engineLog.joined(separator: "\n"), forType: .string)
+                    NSPasteboard.copyString(state.engineLog.map(\.text).joined(separator: "\n"))
                     state.toastMessage = "日誌已複製"
                 } label: {
                     Label("複製全部", systemImage: "doc.on.doc")

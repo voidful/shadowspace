@@ -90,6 +90,14 @@ struct ClashAPIClient {
         var downloadTotal: Int
     }
 
+    // 連線頁每秒重繪，formatter 抽成 static 避免每次重配置。ISO8601DateFormatter 執行緒安全（Apple 文件保證）。
+    private static let isoFractional: ISO8601DateFormatter = {
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fmt
+    }()
+    private static let isoPlain = ISO8601DateFormatter()
+
     /// 目前所有活躍連線。欄位型別在不同引擎間不一致，用寬鬆解析。
     func connections() async -> ConnectionsSnapshot? {
         guard let (data, resp) = try? await URLSession.shared.data(for: request("/connections")),
@@ -97,9 +105,6 @@ struct ClashAPIClient {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
-        let isoFmt = ISO8601DateFormatter()
-        isoFmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoFmtPlain = ISO8601DateFormatter()
 
         var items: [ConnectionInfo] = []
         for conn in (obj["connections"] as? [[String: Any]]) ?? [] {
@@ -125,7 +130,7 @@ struct ClashAPIClient {
                 chain: (conn["chains"] as? [String])?.first ?? "",
                 upload: (conn["upload"] as? Int) ?? 0,
                 download: (conn["download"] as? Int) ?? 0,
-                start: isoFmt.date(from: startStr) ?? isoFmtPlain.date(from: startStr)
+                start: Self.isoFractional.date(from: startStr) ?? Self.isoPlain.date(from: startStr)
             ))
         }
         // 新連線排前面

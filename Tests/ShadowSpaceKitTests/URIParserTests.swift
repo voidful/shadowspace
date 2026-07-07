@@ -124,9 +124,22 @@ final class URIParserTests: XCTestCase {
         https://airport.example.com/sub?token=abc
         trojan://pw@5.6.7.8:443#node2
         """
-        let (nodes, subs) = URIParser.classify(text)
+        let (nodes, subs, unparsed) = URIParser.classify(text)
         XCTAssertEqual(nodes.count, 2)
         XCTAssertEqual(subs, ["https://airport.example.com/sub?token=abc"])
+        XCTAssertTrue(unparsed.isEmpty)
+    }
+
+    func testClassifyReportsUnparsedLines() {
+        let text = """
+        trojan://pw@5.6.7.8:443#ok
+        這是一行亂貼的文字
+        vmess://not-valid-base64
+        """
+        let (nodes, subs, unparsed) = URIParser.classify(text)
+        XCTAssertEqual(nodes.count, 1)
+        XCTAssertTrue(subs.isEmpty)
+        XCTAssertEqual(unparsed.count, 2)   // 亂貼文字 + 壞掉的 vmess
     }
 
     func testBase64WrappedSubscription() {
@@ -142,6 +155,21 @@ final class URIParserTests: XCTestCase {
         XCTAssertEqual(nodes.count, 2)
         XCTAssertEqual(nodes[0].name, "a")
         XCTAssertEqual(nodes[1].proto, .trojan)
+    }
+
+    // MARK: - insecure 別名統一
+
+    func testHysteria2AcceptsAllowInsecureAlias() {
+        // 過去 hy2 只認 insecure，收不到 allowInsecure/allow_insecure——已統一。
+        XCTAssertEqual(URIParser.parse("hysteria2://pw@a.com:443?allowInsecure=1#h")?.insecure, true)
+        XCTAssertEqual(URIParser.parse("hysteria2://pw@a.com:443?allow_insecure=1#h")?.insecure, true)
+        XCTAssertEqual(URIParser.parse("hysteria2://pw@a.com:443?insecure=1#h")?.insecure, true)
+        XCTAssertEqual(URIParser.parse("hysteria2://pw@a.com:443#h")?.insecure, false)
+    }
+
+    func testVLESSAcceptsAllInsecureAliases() {
+        XCTAssertEqual(URIParser.parse("vless://uuid@a.com:443?security=tls&allow_insecure=1#v")?.insecure, true)
+        XCTAssertEqual(URIParser.parse("vless://uuid@a.com:443?security=tls&insecure=true#v")?.insecure, true)
     }
 
     // MARK: - Base64 工具

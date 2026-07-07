@@ -198,6 +198,7 @@ enum ClashYAMLParser {
             node.sni = str(m, "sni") ?? str(m, "servername")
             node.insecure = bool(m, "skip-cert-verify")
             node.alpn = list(m, "alpn")
+            node.fingerprint = str(m, "client-fingerprint")
             applyTransport(&node, m)
             return node
 
@@ -210,6 +211,7 @@ enum ClashYAMLParser {
             node.sni = str(m, "servername") ?? str(m, "sni")
             node.insecure = bool(m, "skip-cert-verify")
             node.alpn = list(m, "alpn")
+            node.fingerprint = str(m, "client-fingerprint")
             applyTransport(&node, m)
             return node
 
@@ -221,6 +223,7 @@ enum ClashYAMLParser {
             node.insecure = bool(m, "skip-cert-verify")
             node.flow = str(m, "flow")
             node.alpn = list(m, "alpn")
+            node.fingerprint = str(m, "client-fingerprint")
             if let reality = map(m, "reality-opts") {
                 node.tls = true
                 node.realityPublicKey = str(reality, "public-key")
@@ -242,6 +245,7 @@ enum ClashYAMLParser {
             node.sni = str(m, "sni") ?? str(m, "servername")
             node.insecure = bool(m, "skip-cert-verify")
             node.alpn = list(m, "alpn")
+            node.fingerprint = str(m, "client-fingerprint")
             return node
 
         case "hysteria2", "hy2":

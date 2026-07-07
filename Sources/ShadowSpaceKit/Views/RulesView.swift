@@ -9,28 +9,16 @@ struct RulesView: View {
     var body: some View {
         List {
             Section {
-                Toggle(isOn: Binding(
-                    get: { state.settings.adBlock },
-                    set: { state.settings.adBlock = $0; state.saveAndApply() }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("阻擋廣告")
-                        Text("使用 AdGuard 廣告網域清單，所有模式皆生效")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                Toggle(isOn: state.appliedSetting(\.adBlock)) {
+                    CaptionedLabel("阻擋廣告", "使用 geosite 廣告網域清單（category-ads-all）；sing-box 引擎下所有模式皆生效")
                 }
-                Toggle(isOn: Binding(
-                    get: { state.settings.chinaDirect },
-                    set: { state.settings.chinaDirect = $0; state.saveAndApply() }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("中國大陸網站直連")
-                        Text("規則模式下，中國大陸網域與 IP 不走代理")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                Toggle(isOn: state.appliedSetting(\.chinaDirect)) {
+                    CaptionedLabel("中國大陸網站直連", "規則模式下，中國大陸網域與 IP 不走代理")
                 }
             } header: {
                 Text("內建規則")
+            } footer: {
+                builtinRulesNotice
             }
 
             Section {
@@ -70,9 +58,26 @@ struct RulesView: View {
         }
     }
 
+    /// 原生引擎（含 App Store 版）不吃內建規則與 GeoIP/Geosite/規則集，提醒使用者避免誤以為已生效。
+    @ViewBuilder
+    private var builtinRulesNotice: some View {
+#if APP_STORE
+        Label("App Store 版使用原生引擎，內建規則與 GeoIP／Geosite／規則集類型的自訂規則暫不支援。",
+              systemImage: "info.circle")
+            .font(.caption).foregroundStyle(.orange)
+#else
+        if state.settings.engineKind == .native {
+            Label("原生引擎暫不支援內建規則與 GeoIP／Geosite／規則集類型，需改用 sing-box 引擎（節點原生不支援而自動改用 sing-box 時仍會生效）。",
+                  systemImage: "info.circle")
+                .font(.caption).foregroundStyle(.orange)
+        }
+#endif
+    }
+
     private func ruleRow(_ rule: UserRule) -> some View {
         HStack(spacing: 10) {
-            Toggle("", isOn: Binding(
+            // 用規則內容當標籤（labelsHidden 隱藏外觀），VoiceOver 才唸得出「這是哪條規則的開關」。
+            Toggle(rule.value.isEmpty ? "未填寫的規則" : rule.value, isOn: Binding(
                 get: { rule.enabled },
                 set: { state.toggleRule(rule.id, enabled: $0) }
             ))
@@ -94,6 +99,14 @@ struct RulesView: View {
                 .padding(.vertical, 2)
                 .background(policyColor(rule.policy).opacity(0.15), in: Capsule())
                 .foregroundStyle(policyColor(rule.policy))
+            Button {
+                editingRule = rule
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("編輯規則")
+            .accessibilityLabel("編輯規則")
         }
         .opacity(rule.enabled ? 1 : 0.45)
         .contentShape(Rectangle())
@@ -120,7 +133,12 @@ struct RuleEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let rule: UserRule?
-    @State private var draft = UserRule()
+    @State private var draft: UserRule
+
+    init(rule: UserRule?) {
+        self.rule = rule
+        _draft = State(initialValue: rule ?? UserRule())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -154,29 +172,17 @@ struct RuleEditorSheet: View {
             }
             .pickerStyle(.segmented)
 
-            HStack {
-                if rule != nil {
-                    Button("刪除", role: .destructive) {
-                        state.deleteRule(draft.id)
-                        dismiss()
-                    }
-                }
-                Spacer()
-                Button("取消") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("儲存") {
+            EditorSheetFooter(
+                onDelete: rule == nil ? nil : { state.deleteRule(draft.id); dismiss() },
+                saveDisabled: draft.values.isEmpty,
+                onCancel: { dismiss() },
+                onSave: {
                     state.upsertRule(draft)
                     dismiss()
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .disabled(draft.values.isEmpty)
-            }
+            )
         }
         .padding(20)
         .frame(width: 420)
-        .onAppear {
-            if let rule { draft = rule }
-        }
     }
 }

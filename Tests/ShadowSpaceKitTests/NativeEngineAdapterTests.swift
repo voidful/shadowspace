@@ -52,7 +52,7 @@ final class NativeEngineAdapterTests: XCTestCase {
         XCTAssertTrue(NativeEngineAdapter.isSupported(vision))
 
         // vision 依賴自建 TLS 的 splice，須強制走 nativeTLS（即使全域關閉）
-        let visCfg = NativeEngineAdapter.transport(for: vision, defaultTLS: true, nativeTLS: false, fingerprint: "chrome")
+        let visCfg = NativeEngineAdapter.transport(for: vision, defaultTLS: true, tls: .init(nativeTLS: false, fingerprint: "chrome"))
         _ = visCfg   // transport() 本身不含 flow 判斷；nativeTLS 強制在 outbound(for:) 內，故此處僅確保可建立
 
         // flow-less REALITY（有效 pbk）仍受支援
@@ -71,17 +71,17 @@ final class NativeEngineAdapterTests: XCTestCase {
         // Trojan（TCP+TLS）：nativeTLS 與指紋應傳入 TransportConfig
         var trojan = ProxyNode(name: "t", proto: .trojan, server: "x.com", port: 443)
         trojan.password = "pw"; trojan.tls = true
-        let cfg = NativeEngineAdapter.transport(for: trojan, defaultTLS: true, nativeTLS: true, fingerprint: "chrome")
+        let cfg = NativeEngineAdapter.transport(for: trojan, defaultTLS: true, tls: .init(nativeTLS: true, fingerprint: "chrome"))
         XCTAssertTrue(cfg.nativeTLS)
         XCTAssertEqual(cfg.fingerprint, "chrome")
         XCTAssertEqual(cfg.network, .tcp)
 
         // 節點自帶 fp 優先於全域預設
         var withFP = trojan; withFP.fingerprint = "safari"
-        XCTAssertEqual(NativeEngineAdapter.transport(for: withFP, defaultTLS: true, nativeTLS: true, fingerprint: "chrome").fingerprint, "safari")
+        XCTAssertEqual(NativeEngineAdapter.transport(for: withFP, defaultTLS: true, tls: .init(nativeTLS: true, fingerprint: "chrome")).fingerprint, "safari")
 
         // 關閉時不啟用
-        XCTAssertFalse(NativeEngineAdapter.transport(for: trojan, defaultTLS: true, nativeTLS: false, fingerprint: "chrome").nativeTLS)
+        XCTAssertFalse(NativeEngineAdapter.transport(for: trojan, defaultTLS: true, tls: .init(nativeTLS: false, fingerprint: "chrome")).nativeTLS)
     }
 
     func testDefaultNativeTLSEnabled() {

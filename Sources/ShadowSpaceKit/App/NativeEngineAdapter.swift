@@ -11,10 +11,17 @@ enum NativeEngineAdapter {
         }
     }
 
+    /// 原生引擎 TLS 選項：打包 fragment / nativeTLS / fingerprint，避免逐層手遞。
+    /// 全預設值 → 保留 memberwise init，測試可一行建構（勿加自訂 init）。
+    struct TLSOptions {
+        var fragment: Bool = false
+        var nativeTLS: Bool = false
+        var fingerprint: String? = nil
+    }
+
     /// ProxyNode → ShadowCore.Outbound。不支援的協議/特性丟出清楚的錯誤。
-    /// nativeTLS：Trojan/VLESS 的 TCP+TLS 改走自建 TLS 1.3（瀏覽器指紋）；fingerprint：指紋預設。
-    static func outbound(for node: ProxyNode, fragment: Bool = false,
-                         nativeTLS: Bool = false, fingerprint: String? = nil) throws -> Outbound {
+    /// tls.nativeTLS：Trojan/VLESS 的 TCP+TLS 改走自建 TLS 1.3（瀏覽器指紋）；tls.fingerprint：指紋預設。
+    static func outbound(for node: ProxyNode, tls: TLSOptions = TLSOptions()) throws -> Outbound {
         let host = node.server
         let port = UInt16(clamping: node.port)
 
@@ -39,8 +46,7 @@ enum NativeEngineAdapter {
         case .trojan:
             return TrojanOutbound(name: node.name, host: host, port: port,
                                   password: node.password ?? "",
-                                  transport: transport(for: node, defaultTLS: true, fragment: fragment,
-                                                       nativeTLS: nativeTLS, fingerprint: fingerprint))
+                                  transport: transport(for: node, defaultTLS: true, tls: tls))
 
         case .vless:
             let isVision = (node.flow == "xtls-rprx-vision")
@@ -58,11 +64,11 @@ enum NativeEngineAdapter {
             }
             // XTLS Vision 的 direct 切換依賴自建 TLS 1.3 的 splice（裸傳內層 record、繞過外層 TLS），
             // Apple NWProtocolTLS 無法配合，故 vision 一律走 nativeTLS。
-            let vlessNativeTLS = isVision ? true : nativeTLS
+            var vlessTLS = tls
+            if isVision { vlessTLS.nativeTLS = true }
             guard let outbound = VlessOutbound(
                 name: node.name, host: host, port: port, uuid: node.uuid ?? "",
-                transport: transport(for: node, defaultTLS: node.tls, fragment: fragment,
-                                     nativeTLS: vlessNativeTLS, fingerprint: fingerprint, reality: reality),
+                transport: transport(for: node, defaultTLS: node.tls, tls: vlessTLS, reality: reality),
                 flow: node.flow) else {
                 throw AdapterError.unsupported("VLESS UUID 格式錯誤")
             }
@@ -85,18 +91,18 @@ enum NativeEngineAdapter {
         }
     }
 
-    static func transport(for node: ProxyNode, defaultTLS: Bool, fragment: Bool = false,
-                          nativeTLS: Bool = false, fingerprint: String? = nil,
+    static func transport(for node: ProxyNode, defaultTLS: Bool,
+                          tls: TLSOptions = TLSOptions(),
                           reality: RealityClientConfig? = nil) -> TransportConfig {
         var config = TransportConfig()
         config.tls = node.tls || defaultTLS || reality != nil
         config.sni = node.sni
         config.insecure = node.insecure
         config.alpn = node.alpn
-        config.fragment = fragment && config.tls   // 只有 TLS 連線才需要分片
+        config.fragment = tls.fragment && config.tls   // 只有 TLS 連線才需要分片
         config.reality = reality
-        config.nativeTLS = nativeTLS || reality != nil   // REALITY 必走自建 TLS（Apple TLS 無法做）
-        config.fingerprint = node.fingerprint ?? fingerprint
+        config.nativeTLS = tls.nativeTLS || reality != nil   // REALITY 必走自建 TLS（Apple TLS 無法做）
+        config.fingerprint = node.fingerprint ?? tls.fingerprint
         if node.network == "ws" {
             config.network = .ws
             config.wsPath = node.wsPath ?? "/"

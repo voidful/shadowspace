@@ -29,16 +29,18 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 struct MainWindow: View {
     @EnvironmentObject private var state: AppState
-    @State private var selection: SidebarItem = .home
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarItem.allCases, selection: $selection) { item in
+            List(SidebarItem.allCases, selection: Binding(
+                get: { state.sidebarSelection },
+                set: { state.sidebarSelection = $0 }
+            )) { item in
                 Label(item.label, systemImage: item.icon).tag(item)
             }
             .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 200)
         } detail: {
-            switch selection {
+            switch state.sidebarSelection {
             case .home: HomeView()
             case .servers: ServersView()
             case .rules: RulesView()
@@ -78,6 +80,49 @@ struct MainWindow: View {
 }
 
 // MARK: - 共用小元件
+
+/// 出口切換選單的共用內容（群組區 + 節點區，選中打勾、未選中顯示協議/群組圖示）。
+/// 首頁與選單列共用，避免兩份實作飄移。放進 Menu {...} 的內容位置使用。
+struct OutboundMenuContent: View {
+    @ObservedObject var state: AppState
+    /// 節點顯示上限（選單列空間有限）；超出時附「開啟主視窗」溢出鈕。nil = 不限。
+    var nodeLimit: Int? = nil
+    var onOverflow: (() -> Void)? = nil
+
+    private var shownNodes: [ProxyNode] {
+        guard let nodeLimit else { return state.nodes }
+        return Array(state.nodes.prefix(nodeLimit))
+    }
+
+    var body: some View {
+        if !state.groups.isEmpty {
+            Section("群組") {
+                ForEach(state.groups) { group in
+                    outboundButton(id: group.id, title: group.name, icon: group.type.icon)
+                }
+            }
+        }
+        if !state.nodes.isEmpty {
+            Section("節點") {
+                ForEach(shownNodes) { node in
+                    outboundButton(id: node.id, title: node.name, icon: node.proto.icon)
+                }
+                if let nodeLimit, state.nodes.count > nodeLimit, let onOverflow {
+                    Divider()
+                    Button("更多節點請開啟主視窗…", action: onOverflow)
+                }
+            }
+        }
+    }
+
+    private func outboundButton(id: UUID, title: String, icon: String) -> some View {
+        Button {
+            state.selectNode(id)
+        } label: {
+            Label(title, systemImage: state.selectedNodeID == id ? "checkmark" : icon)
+        }
+    }
+}
 
 /// 延遲數字徽章：綠 < 150ms、橘 < 400ms、紅 ≥ 400ms / 逾時
 struct LatencyBadge: View {

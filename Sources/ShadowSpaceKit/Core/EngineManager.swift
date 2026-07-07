@@ -81,7 +81,7 @@ final class EngineManager {
     }
 
     private func processAlive(_ pid: Int32) -> Bool {
-        // root 程序无法直接 signal：EPERM 代表還活著，ESRCH 代表已結束
+        // root 程序無法直接 signal：EPERM 代表還活著，ESRCH 代表已結束
         kill(pid, 0) == 0 || errno == EPERM
     }
 

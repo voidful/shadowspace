@@ -6,9 +6,18 @@ struct NodeEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let node: ProxyNode?
-    @State private var draft = ProxyNode(name: "", proto: .shadowsocks, server: "", port: 443)
+    @State private var draft: ProxyNode
 
-    private let fingerprints = ["", "chrome", "firefox", "safari", "ios", "edge", "random"]
+    init(node: ProxyNode?) {
+        self.node = node
+        var initial = node ?? ProxyNode(name: "", proto: .shadowsocks, server: "", port: 443)
+        // 新增 SS 節點：把畫面預設顯示的加密方式寫進 draft，消除「顯示有值但實際 nil」矛盾。
+        if node == nil, initial.proto == .shadowsocks, initial.method == nil {
+            initial.method = "aes-256-gcm"
+        }
+        _draft = State(initialValue: initial)
+    }
+
     private let ssMethodSuggestions = [
         "aes-256-gcm", "aes-128-gcm", "chacha20-ietf-poly1305",
         "2022-blake3-aes-256-gcm", "2022-blake3-aes-128-gcm",
@@ -39,11 +48,15 @@ struct NodeEditorSheet: View {
             }
             .formStyle(.grouped)
 
-            HStack {
-                Spacer()
-                Button("取消") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("儲存") {
+            EditorSheetFooter(
+                onDelete: node == nil ? nil : {
+                    if let node { state.deleteNode(node.id) }
+                    dismiss()
+                },
+                hint: validationHint,
+                saveDisabled: validationHint != nil,
+                onCancel: { dismiss() },
+                onSave: {
                     var final = draft
                     if final.name.trimmingCharacters(in: .whitespaces).isEmpty {
                         final.name = "\(final.server):\(final.port)"
@@ -51,43 +64,43 @@ struct NodeEditorSheet: View {
                     state.upsertNode(final)
                     dismiss()
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .disabled(!isValid)
-            }
+            )
             .padding(16)
         }
         .frame(width: 480, height: 560)
-        .onAppear {
-            if let node { draft = node }
-        }
         .onChange(of: draft.proto) { _, newProto in
             // 切換協議時調整 TLS 預設：trojan/hy2/tuic 必為 TLS
             switch newProto {
             case .trojan, .hysteria2, .tuic: draft.tls = true
-            case .shadowsocks, .socks: draft.tls = false
+            case .shadowsocks:
+                draft.tls = false
+                if draft.method == nil { draft.method = "aes-256-gcm" }
+            case .socks: draft.tls = false
             default: break
             }
         }
     }
 
-    private var isValid: Bool {
-        guard !draft.server.trimmingCharacters(in: .whitespaces).isEmpty,
-              (1...65535).contains(draft.port) else { return false }
+    /// 缺欄提示：回 nil 代表可儲存，否則回缺哪一項（顯示在灰色儲存鈕旁，讓人不用逐欄猜）。
+    private var validationHint: String? {
+        if draft.server.trimmingCharacters(in: .whitespaces).isEmpty { return "請填寫伺服器位址" }
+        guard (1...65535).contains(draft.port) else { return "連接埠需為 1–65535" }
         switch draft.proto {
         case .shadowsocks:
-            return !(draft.method ?? "").isEmpty && !(draft.password ?? "").isEmpty
-        case .vmess, .vless:
-            return !(draft.uuid ?? "").isEmpty
+            if (draft.method ?? "").isEmpty { return "請選擇加密方式" }
+            if (draft.password ?? "").isEmpty { return "請填寫密碼" }
+        case .vmess, .vless, .tuic:
+            if (draft.uuid ?? "").isEmpty { return "請填寫 UUID" }
         case .trojan, .hysteria2, .anytls:
-            return !(draft.password ?? "").isEmpty
-        case .tuic:
-            return !(draft.uuid ?? "").isEmpty
+            if (draft.password ?? "").isEmpty { return "請填寫密碼" }
         case .socks:
-            return true
+            break
         case .wireguard:
-            return !(draft.wgPrivateKey ?? "").isEmpty && !(draft.wgPeerPublicKey ?? "").isEmpty
+            if (draft.wgPrivateKey ?? "").isEmpty || (draft.wgPeerPublicKey ?? "").isEmpty {
+                return "WireGuard 請改用「貼上匯入」新增"
+            }
         }
+        return nil
     }
 
     // MARK: - 認證欄位
@@ -170,8 +183,14 @@ struct NodeEditorSheet: View {
                 TextField("SNI（可空，預設用伺服器位址）", text: optional($draft.sni))
                 Toggle("允許不安全憑證", isOn: $draft.insecure)
                 Picker("uTLS 指紋", selection: optional($draft.fingerprint, default: "")) {
-                    ForEach(fingerprints, id: \.self) { fp in
-                        Text(fp.isEmpty ? "無" : fp).tag(fp)
+                    Text("預設（跟隨全域）").tag("")
+                    ForEach(TLSFingerprintOptions.browsers, id: \.value) { option in
+                        Text(option.label).tag(option.value)
+                    }
+                    // 容忍舊值或訂閱帶來的非清單指紋（如 random/android/360），否則 Picker 顯示空白
+                    if let fp = draft.fingerprint, !fp.isEmpty,
+                       !TLSFingerprintOptions.browsers.contains(where: { $0.value == fp }) {
+                        Text(fp).tag(fp)
                     }
                 }
                 if draft.proto == .vless {

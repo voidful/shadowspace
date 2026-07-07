@@ -74,12 +74,17 @@ enum NodeShare {
             items.append(("sni", node.sni))
             items.append(("fp", node.fingerprint))
             items.append(("flow", node.flow))
+            items.append(("alpn", node.alpn?.joined(separator: ",")))
             if node.insecure { items.append(("allowInsecure", "1")) }
             items.append(contentsOf: transportItems(node))
             return "vless://\(node.uuid ?? "")@\(host):\(node.port)\(queryString(items))\(name)"
 
         case .trojan:
-            var items: [(String, String?)] = [("sni", node.sni), ("fp", node.fingerprint)]
+            var items: [(String, String?)] = [
+                ("sni", node.sni),
+                ("fp", node.fingerprint),
+                ("alpn", node.alpn?.joined(separator: ",")),
+            ]
             if node.insecure { items.append(("allowInsecure", "1")) }
             items.append(contentsOf: transportItems(node))
             return "trojan://\(encodeComponent(node.password ?? ""))@\(host):\(node.port)\(queryString(items))\(name)"

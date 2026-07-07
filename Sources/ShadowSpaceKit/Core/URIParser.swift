@@ -5,6 +5,12 @@ import Foundation
 /// 以及 base64 包裝的多行訂閱內容。
 enum URIParser {
 
+    /// 支援的分享連結協議清單（UI 說明與匯入失敗訊息共用，避免各處手抄漂移）。
+    static let supportedSchemesText = "ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// socks:// anytls://"
+
+    /// App Store 版（原生 NetworkExtension）支援的協議子集。
+    static let appStoreSupportedSchemesText = "ss:// trojan:// vless:// socks://"
+
     // MARK: - URI 結構
 
     struct URIParts {
@@ -12,7 +18,6 @@ enum URIParser {
         var userinfo: String?
         var host: String = ""
         var port: Int = 0
-        var path: String?
         var query: [String: String] = [:]
         var fragment: String?
     }
@@ -41,9 +46,8 @@ enum URIParser {
                 parts.query[key] = value
             }
         }
+        // 切掉 host 後的路徑（僅用於分隔，內容不需保留）
         if let slash = rest.firstIndex(of: "/") {
-            let p = String(rest[slash...])
-            parts.path = p.removingPercentEncoding ?? p
             rest = String(rest[..<slash])
         }
         if let at = rest.lastIndex(of: "@") {
@@ -88,8 +92,9 @@ enum URIParser {
     }
 
     /// 解析多行文字（剪貼簿、訂閱內容）。
-    /// 整段是 base64 時先解開；回傳節點與其中夾帶的 http(s) 訂閱連結。
-    static func classify(_ text: String) -> (nodes: [ProxyNode], subscriptionURLs: [String]) {
+    /// 整段是 base64 時先解開；回傳節點、其中夾帶的 http(s) 訂閱連結，
+    /// 以及既非訂閱網址也解不出節點的「無法辨識」行（給使用者回饋，避免貼錯的行無聲消失）。
+    static func classify(_ text: String) -> (nodes: [ProxyNode], subscriptionURLs: [String], unparsedLines: [String]) {
         var content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !content.contains("://"),
            let decoded = Base64Util.decodeString(content),
@@ -97,10 +102,11 @@ enum URIParser {
             content = decoded
         }
         if WireGuardParser.looksLikeConfig(content), let wg = WireGuardParser.parse(content) {
-            return (nodes: [wg], subscriptionURLs: [])
+            return (nodes: [wg], subscriptionURLs: [], unparsedLines: [])
         }
         var nodes: [ProxyNode] = []
         var subs: [String] = []
+        var unparsed: [String] = []
         for rawLine in content.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
@@ -108,9 +114,11 @@ enum URIParser {
                 subs.append(line)
             } else if let node = parse(line) {
                 nodes.append(node)
+            } else {
+                unparsed.append(line)
             }
         }
-        return (nodes, subs)
+        return (nodes, subs, unparsed)
     }
 
     static func parseMultiple(_ text: String) -> [ProxyNode] {
@@ -152,7 +160,7 @@ enum URIParser {
         }
 
         var node = ProxyNode(
-            name: fragName ?? parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: fragName ?? parts.displayName,
             proto: .shadowsocks, server: parts.host, port: parts.port
         )
         node.method = pair.0
@@ -245,7 +253,7 @@ enum URIParser {
               let uuid = parts.userinfo, !uuid.isEmpty, parts.port > 0 else { return nil }
 
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .vless, server: parts.host, port: parts.port
         )
         node.uuid = uuid.removingPercentEncoding ?? uuid
@@ -253,9 +261,9 @@ enum URIParser {
         let q = parts.query
         let security = (q["security"] ?? "none").lowercased()
         node.tls = (security == "tls" || security == "reality")
-        node.sni = q["sni"] ?? q["peer"]
+        node.sni = parts.sniValue
         node.fingerprint = q["fp"]?.isEmpty == false ? q["fp"] : nil
-        node.insecure = ["1", "true"].contains((q["allowInsecure"] ?? q["insecure"] ?? "").lowercased())
+        node.insecure = parts.insecureFlag
         if security == "reality" {
             node.realityPublicKey = q["pbk"]
             node.realityShortID = q["sid"]
@@ -264,9 +272,7 @@ enum URIParser {
             node.flow = flow
         }
         applyTransport(&node, query: q)
-        if let alpn = q["alpn"], !alpn.isEmpty {
-            node.alpn = alpn.split(separator: ",").map(String.init)
-        }
+        node.alpn = parts.alpnList
         return node
     }
 
@@ -277,18 +283,16 @@ enum URIParser {
               let pw = parts.userinfo, !pw.isEmpty, parts.port > 0 else { return nil }
 
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .trojan, server: parts.host, port: parts.port
         )
         node.password = pw.removingPercentEncoding ?? pw
         node.tls = true
         let q = parts.query
-        node.sni = q["sni"] ?? q["peer"]
-        node.insecure = ["1", "true"].contains((q["allowInsecure"] ?? q["insecure"] ?? "").lowercased())
+        node.sni = parts.sniValue
+        node.insecure = parts.insecureFlag
         node.fingerprint = q["fp"]?.isEmpty == false ? q["fp"] : nil
-        if let alpn = q["alpn"], !alpn.isEmpty {
-            node.alpn = alpn.split(separator: ",").map(String.init)
-        }
+        node.alpn = parts.alpnList
         applyTransport(&node, query: q)
         return node
     }
@@ -298,15 +302,15 @@ enum URIParser {
     static func parseHysteria2(_ raw: String) -> ProxyNode? {
         guard let parts = splitURI(raw), parts.port > 0 else { return nil }
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .hysteria2, server: parts.host, port: parts.port
         )
         let ui = parts.userinfo ?? ""
         node.password = ui.removingPercentEncoding ?? ui
         node.tls = true
         let q = parts.query
-        node.sni = q["sni"]
-        node.insecure = ["1", "true"].contains((q["insecure"] ?? "").lowercased())
+        node.sni = parts.sniValue
+        node.insecure = parts.insecureFlag
         if let obfs = q["obfs"], !obfs.isEmpty {
             node.obfs = obfs
             node.obfsPassword = q["obfs-password"]
@@ -323,21 +327,19 @@ enum URIParser {
         guard let colon = decoded.firstIndex(of: ":") else { return nil }
 
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .tuic, server: parts.host, port: parts.port
         )
         node.uuid = String(decoded[..<colon])
         node.password = String(decoded[decoded.index(after: colon)...])
         node.tls = true
         let q = parts.query
-        node.sni = q["sni"]
-        node.insecure = ["1", "true"].contains((q["allow_insecure"] ?? q["insecure"] ?? "").lowercased())
+        node.sni = parts.sniValue
+        node.insecure = parts.insecureFlag
         if let cc = q["congestion_control"], !cc.isEmpty {
             node.congestionControl = cc
         }
-        if let alpn = q["alpn"], !alpn.isEmpty {
-            node.alpn = alpn.split(separator: ",").map(String.init)
-        }
+        node.alpn = parts.alpnList
         return node
     }
 
@@ -348,17 +350,14 @@ enum URIParser {
         guard let parts = splitURI(raw),
               let pw = parts.userinfo, !pw.isEmpty, parts.port > 0 else { return nil }
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .anytls, server: parts.host, port: parts.port
         )
         node.password = pw.removingPercentEncoding ?? pw
         node.tls = true
-        let q = parts.query
-        node.sni = q["sni"] ?? q["peer"]
-        node.insecure = ["1", "true"].contains((q["allowInsecure"] ?? q["insecure"] ?? "").lowercased())
-        if let alpn = q["alpn"], !alpn.isEmpty {
-            node.alpn = alpn.split(separator: ",").map(String.init)
-        }
+        node.sni = parts.sniValue
+        node.insecure = parts.insecureFlag
+        node.alpn = parts.alpnList
         return node
     }
 
@@ -367,7 +366,7 @@ enum URIParser {
     static func parseSOCKS(_ raw: String) -> ProxyNode? {
         guard let parts = splitURI(raw), parts.port > 0 else { return nil }
         var node = ProxyNode(
-            name: parts.fragment ?? "\(parts.host):\(parts.port)",
+            name: parts.displayName,
             proto: .socks, server: parts.host, port: parts.port
         )
         if let ui = parts.userinfo, !ui.isEmpty {
@@ -399,4 +398,29 @@ enum URIParser {
             break
         }
     }
+}
+
+// MARK: - Query 便利存取
+
+extension URIParser.URIParts {
+    /// insecure 旗標：容忍 allowInsecure / insecure / allow_insecure 三種別名（機場輸出不統一），
+    /// 以「先出現者為準」——修好過去 hysteria2 只認 insecure、收不到 allowInsecure 的缺口。
+    var insecureFlag: Bool {
+        for key in ["allowInsecure", "insecure", "allow_insecure"] {
+            if let v = query[key] { return ["1", "true"].contains(v.lowercased()) }
+        }
+        return false
+    }
+
+    /// alpn 清單（逗號分隔）。
+    var alpnList: [String]? {
+        guard let alpn = query["alpn"], !alpn.isEmpty else { return nil }
+        return alpn.split(separator: ",").map(String.init)
+    }
+
+    /// SNI：容忍 sni / peer 兩種別名。
+    var sniValue: String? { query["sni"] ?? query["peer"] }
+
+    /// 顯示名稱：fragment 優先，否則 host:port。
+    var displayName: String { fragment ?? "\(host):\(port)" }
 }

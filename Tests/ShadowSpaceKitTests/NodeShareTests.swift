@@ -48,6 +48,7 @@ final class NodeShareTests: XCTestCase {
         node.flow = "xtls-rprx-vision"
         node.realityPublicKey = "PUBKEY123"
         node.realityShortID = "ab12"
+        node.alpn = ["h2"]
         let uri = NodeShare.uri(for: node)
         let parsed = URIParser.parse(uri!)
         XCTAssertEqual(parsed?.proto, .vless)
@@ -56,6 +57,7 @@ final class NodeShareTests: XCTestCase {
         XCTAssertEqual(parsed?.flow, "xtls-rprx-vision")
         XCTAssertEqual(parsed?.fingerprint, "chrome")
         XCTAssertEqual(parsed?.tls, true)
+        XCTAssertEqual(parsed?.alpn, ["h2"])
     }
 
     func testTrojanRoundTrip() {
@@ -64,10 +66,12 @@ final class NodeShareTests: XCTestCase {
         node.tls = true
         node.sni = "tw.example.com"
         node.insecure = true
+        node.alpn = ["h2", "http/1.1"]
         let uri = NodeShare.uri(for: node)
         let parsed = URIParser.parse(uri!)
         XCTAssertEqual(parsed?.password, "p@ss")
         XCTAssertEqual(parsed?.insecure, true)
+        XCTAssertEqual(parsed?.alpn, ["h2", "http/1.1"])
         XCTAssertEqual(parsed?.name, "台灣 01")
     }
 

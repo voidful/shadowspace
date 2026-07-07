@@ -37,10 +37,11 @@ final class WireGuardTests: XCTestCase {
     }
 
     func testImportDetectsWireGuard() {
-        let (nodes, subs) = URIParser.classify(conf)
+        let (nodes, subs, unparsed) = URIParser.classify(conf)
         XCTAssertEqual(nodes.count, 1)
         XCTAssertEqual(nodes.first?.proto, .wireguard)
         XCTAssertTrue(subs.isEmpty)
+        XCTAssertTrue(unparsed.isEmpty)
     }
 
     func testSingBoxEndpoint() {

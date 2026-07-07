@@ -18,9 +18,13 @@ enum SystemProxyManager {
 
     private static let tool = URL(fileURLWithPath: "/usr/sbin/networksetup")
 
+    /// 執行外部指令的鉤子（預設呼叫 EngineManager.runProcess）。
+    /// 測試可替換此 closure 以離線驗證 bypass/殘留偵測/清除邏輯，不真的動系統網路設定。
+    static var runProcess: (URL, [String]) -> (Int32, String) = EngineManager.runProcess
+
     /// 列出啟用中的網路服務（Wi-Fi、乙太網路…），開頭帶 * 的是停用狀態
     static func activeServices() -> [String] {
-        let (status, output) = EngineManager.runProcess(tool, ["-listallnetworkservices"])
+        let (status, output) = runProcess(tool, ["-listallnetworkservices"])
         guard status == 0 else { return [] }
         return output
             .split(whereSeparator: \.isNewline)
@@ -31,7 +35,7 @@ enum SystemProxyManager {
 
     /// 列出所有網路服務（含停用），用來清除可能殘留在停用服務上的代理。
     static func allServiceNames() -> [String] {
-        let (status, output) = EngineManager.runProcess(tool, ["-listallnetworkservices"])
+        let (status, output) = runProcess(tool, ["-listallnetworkservices"])
         guard status == 0 else { return [] }
         return output
             .split(whereSeparator: \.isNewline)
@@ -55,7 +59,7 @@ enum SystemProxyManager {
 
     /// 讀取某服務某種代理的狀態（啟用與否、伺服器位址）。
     private static func proxyState(_ service: String, getFlag: String) -> (enabled: Bool, server: String?) {
-        let (status, output) = EngineManager.runProcess(tool, [getFlag, service])
+        let (status, output) = runProcess(tool, [getFlag, service])
         guard status == 0 else { return (false, nil) }
         var enabled = false
         var server: String?
@@ -108,10 +112,10 @@ enum SystemProxyManager {
                 || isLoopback(proxyState(service, getFlag: "-getsecurewebproxy").server)
                 || isLoopback(proxyState(service, getFlag: "-getsocksfirewallproxy").server)
             guard ours else { continue }
-            EngineManager.runProcess(tool, ["-setwebproxystate", service, "off"])
-            EngineManager.runProcess(tool, ["-setsecurewebproxystate", service, "off"])
-            EngineManager.runProcess(tool, ["-setsocksfirewallproxystate", service, "off"])
-            EngineManager.runProcess(tool, ["-setproxybypassdomains", service, "Empty"])  // 清空例外清單
+            _ = runProcess(tool, ["-setwebproxystate", service, "off"])
+            _ = runProcess(tool, ["-setsecurewebproxystate", service, "off"])
+            _ = runProcess(tool, ["-setsocksfirewallproxystate", service, "off"])
+            _ = runProcess(tool, ["-setproxybypassdomains", service, "Empty"])  // 清空例外清單
         }
     }
 
@@ -134,7 +138,7 @@ enum SystemProxyManager {
                 ["-setproxybypassdomains", service] + bypass,
             ]
             for args in commands {
-                let (status, output) = EngineManager.runProcess(tool, args)
+                let (status, output) = runProcess(tool, args)
                 if status != 0 {
                     failures.append("\(service): \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
                     break

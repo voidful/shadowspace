@@ -21,4 +21,46 @@ final class SystemProxyTests: XCTestCase {
         XCTAssertTrue(list.contains("localhost"))
         XCTAssertFalse(list.contains("th.t2.lol"))
     }
+
+    // MARK: - runProcess 鉤子：離線驗證殘留偵測
+
+    override func tearDown() {
+        // 還原真實鉤子，避免污染其他測試。
+        SystemProxyManager.runProcess = EngineManager.runProcess
+        super.tearDown()
+    }
+
+    /// 以假的 networksetup 輸出驅動殘留偵測邏輯，不真的碰系統網路設定。
+    private func fakeNetworksetup(webProxyLine: String) -> (URL, [String]) -> (Int32, String) {
+        { _, args in
+            guard let flag = args.first else { return (0, "") }
+            switch flag {
+            case "-listallnetworkservices":
+                return (0, "An asterisk (*) denotes...\nWi-Fi\n")
+            case "-getwebproxy":
+                return (0, webProxyLine)
+            default:
+                return (0, "Enabled: No\nServer:\nPort: 0\n")
+            }
+        }
+    }
+
+    func testResidualProxyDetectedWhenLoopbackWebProxyEnabled() {
+        SystemProxyManager.runProcess = fakeNetworksetup(
+            webProxyLine: "Enabled: Yes\nServer: 127.0.0.1\nPort: 7890\n")
+        XCTAssertTrue(SystemProxyManager.residualProxyDetected())
+    }
+
+    func testNoResidualWhenProxyDisabled() {
+        SystemProxyManager.runProcess = fakeNetworksetup(
+            webProxyLine: "Enabled: No\nServer:\nPort: 0\n")
+        XCTAssertFalse(SystemProxyManager.residualProxyDetected())
+    }
+
+    func testNoResidualWhenProxyEnabledButNotLoopback() {
+        // 使用者自己設的非本機代理不算殘留（不能誤清）。
+        SystemProxyManager.runProcess = fakeNetworksetup(
+            webProxyLine: "Enabled: Yes\nServer: 10.0.0.9\nPort: 8080\n")
+        XCTAssertFalse(SystemProxyManager.residualProxyDetected())
+    }
 }

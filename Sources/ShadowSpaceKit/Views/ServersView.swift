@@ -10,6 +10,10 @@ struct ServersView: View {
     @State private var qrNode: ProxyNode?
     @State private var editingGroup: ProxyGroup?
     @State private var showAddGroup = false
+    @State private var search = ""
+    @State private var sortByLatency = false
+    @State private var deletingSubscription: Subscription?
+    @State private var deletingGroup: ProxyGroup?
 
     var body: some View {
         Group {
@@ -22,12 +26,8 @@ struct ServersView: View {
         .navigationTitle("節點")
         .toolbar {
             ToolbarItemGroup {
-                Button {
-                    Task { await state.importFromClipboard() }
-                } label: {
-                    Label("從剪貼簿匯入", systemImage: "doc.on.clipboard")
-                }
-                .help("自動辨識剪貼簿中的節點連結或訂閱網址")
+                ImportFromClipboardButton(state: state)
+                    .help("自動辨識剪貼簿中的節點連結或訂閱網址")
 
                 Menu {
                     Button("貼上連結匯入…") { showImportSheet = true }
@@ -53,6 +53,16 @@ struct ServersView: View {
                 }
                 .disabled(state.nodes.isEmpty || state.isPinging)
                 .help("對所有節點做 TCP 延遲測試")
+
+                Menu {
+                    Picker("排序", selection: $sortByLatency) {
+                        Text("預設順序").tag(false)
+                        Text("延遲由低到高").tag(true)
+                    }
+                } label: {
+                    Label("排序", systemImage: "arrow.up.arrow.down")
+                }
+                .help("切換節點排序方式")
 
                 if !state.subscriptions.isEmpty {
                     Button {
@@ -91,6 +101,32 @@ struct ServersView: View {
         .sheet(item: $editingGroup) { group in
             GroupEditorSheet(group: group)
         }
+        .searchable(text: $search, placement: .toolbar, prompt: "搜尋節點名稱或伺服器")
+        .confirmationDialog(
+            "確定刪除訂閱「\(deletingSubscription?.name ?? "")」？",
+            isPresented: Binding(
+                get: { deletingSubscription != nil },
+                set: { if !$0 { deletingSubscription = nil } }),
+            titleVisibility: .visible,
+            presenting: deletingSubscription
+        ) { sub in
+            Button("刪除", role: .destructive) { state.deleteSubscription(sub.id) }
+        } message: { sub in
+            let count = state.nodes.filter { $0.subscriptionID == sub.id }.count
+            Text("會一併移除此訂閱的 \(count) 個節點，無法復原。")
+        }
+        .confirmationDialog(
+            "確定刪除群組「\(deletingGroup?.name ?? "")」？",
+            isPresented: Binding(
+                get: { deletingGroup != nil },
+                set: { if !$0 { deletingGroup = nil } }),
+            titleVisibility: .visible,
+            presenting: deletingGroup
+        ) { group in
+            Button("刪除", role: .destructive) { state.deleteGroup(group.id) }
+        } message: { _ in
+            Text("成員節點不會被刪除，僅移除此群組設定。")
+        }
     }
 
     // MARK: - 清單
@@ -108,13 +144,16 @@ struct ServersView: View {
                 }
             }
             ForEach(state.subscriptions) { sub in
-                Section {
-                    nodeRows(state.nodes.filter { $0.subscriptionID == sub.id })
-                } header: {
-                    subscriptionHeader(sub)
+                let subNodes = displayNodes(state.nodes.filter { $0.subscriptionID == sub.id })
+                if !subNodes.isEmpty {
+                    Section {
+                        nodeRows(subNodes)
+                    } header: {
+                        subscriptionHeader(sub)
+                    }
                 }
             }
-            let manualNodes = state.nodes.filter { $0.subscriptionID == nil }
+            let manualNodes = displayNodes(state.nodes.filter { $0.subscriptionID == nil })
             if !manualNodes.isEmpty {
                 Section("手動新增") {
                     nodeRows(manualNodes)
@@ -123,12 +162,31 @@ struct ServersView: View {
         }
     }
 
+    /// 套用搜尋過濾與延遲排序。群組不受影響（在上方獨立區塊）。
+    /// 逾時（-1）與未測（nil）排在最後。
+    private func displayNodes(_ nodes: [ProxyNode]) -> [ProxyNode] {
+        var result = nodes
+        if !search.isEmpty {
+            result = result.filter {
+                $0.name.localizedCaseInsensitiveContains(search) ||
+                $0.server.localizedCaseInsensitiveContains(search)
+            }
+        }
+        if sortByLatency {
+            result.sort {
+                let a = state.latencies[$0.id].flatMap { $0 >= 0 ? $0 : nil } ?? Int.max
+                let b = state.latencies[$1.id].flatMap { $0 >= 0 ? $0 : nil } ?? Int.max
+                return a < b
+            }
+        }
+        return result
+    }
+
     @ViewBuilder
     private func nodeRows(_ nodes: [ProxyNode]) -> some View {
         ForEach(nodes) { node in
             HStack(spacing: 8) {
-                Image(systemName: node.id == state.selectedNodeID ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(node.id == state.selectedNodeID ? Color.accentColor : .secondary)
+                SelectionDot(selected: node.id == state.selectedNodeID)
                 ProtocolBadge(proto: node.proto)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(node.name).lineLimit(1)
@@ -143,18 +201,21 @@ struct ServersView: View {
             .tag(node.id)
             .contextMenu {
                 Button("使用此節點") { state.selectNode(node.id) }
+                Button("測試延遲") { Task { await state.pingNode(node.id) } }
                 Button("編輯…") { editingNode = node }
                 Divider()
                 Button("複製分享連結") {
                     if let uri = NodeShare.uri(for: node) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(uri, forType: .string)
+                        NSPasteboard.copyString(uri)
                         state.toastMessage = "已複製分享連結"
                     }
                 }
                 Button("顯示 QR Code…") { qrNode = node }
                 Divider()
-                Button("刪除", role: .destructive) { state.deleteNode(node.id) }
+                Button("刪除", role: .destructive) {
+                    state.deleteNode(node.id)
+                    state.toastMessage = "已刪除「\(node.name)」"
+                }
             }
         }
     }
@@ -163,8 +224,7 @@ struct ServersView: View {
     private func groupRow(_ group: ProxyGroup) -> some View {
         let selected = group.id == state.selectedNodeID
         HStack(spacing: 8) {
-            Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(selected ? Color.accentColor : .secondary)
+            SelectionDot(selected: selected)
             Image(systemName: group.type.icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
@@ -180,7 +240,7 @@ struct ServersView: View {
             Button("使用此群組") { state.selectNode(group.id) }
             Button("編輯…") { editingGroup = group }
             Divider()
-            Button("刪除", role: .destructive) { state.deleteGroup(group.id) }
+            Button("刪除", role: .destructive) { deletingGroup = group }
         }
     }
 
@@ -200,7 +260,7 @@ struct ServersView: View {
                 }
                 Divider()
                 Button("刪除訂閱", role: .destructive) {
-                    state.deleteSubscription(sub.id)
+                    deletingSubscription = sub
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -218,14 +278,19 @@ struct ServersView: View {
         } description: {
             Text("複製節點分享連結或機場訂閱網址後，點下方按鈕匯入。")
         } actions: {
-            Button {
-                Task { await state.importFromClipboard() }
-            } label: {
-                Label("從剪貼簿匯入", systemImage: "doc.on.clipboard")
-            }
-            .buttonStyle(.borderedProminent)
+            ImportFromClipboardButton(state: state)
+                .buttonStyle(.borderedProminent)
             Button("手動貼上…") { showImportSheet = true }
         }
+    }
+}
+
+/// 節點/群組列的「目前選中」單選圓點。
+private struct SelectionDot: View {
+    let selected: Bool
+    var body: some View {
+        Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+            .foregroundStyle(selected ? Color.accentColor : Color.secondary)
     }
 }
 
@@ -252,11 +317,8 @@ struct QRCodeSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack {
-                    Button("複製連結") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(uri, forType: .string)
-                    }
-                    Button("複製圖片") {
+                    CopyButton(title: "複製連結") { NSPasteboard.copyString(uri) }
+                    CopyButton(title: "複製圖片") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.writeObjects([image])
                     }
@@ -279,7 +341,12 @@ struct GroupEditorSheet: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
     let group: ProxyGroup?
-    @State private var draft = ProxyGroup()
+    @State private var draft: ProxyGroup
+
+    init(group: ProxyGroup?) {
+        self.group = group
+        _draft = State(initialValue: group ?? ProxyGroup())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -327,29 +394,21 @@ struct GroupEditorSheet: View {
             }
             .formStyle(.grouped)
 
-            HStack {
-                if group != nil {
-                    Button("刪除", role: .destructive) {
-                        state.deleteGroup(draft.id); dismiss()
-                    }
-                }
-                Spacer()
-                Button("取消") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("儲存") {
+            EditorSheetFooter(
+                onDelete: group == nil ? nil : { state.deleteGroup(draft.id); dismiss() },
+                hint: draft.memberNodeIDs.isEmpty ? "至少勾選一個成員節點" : nil,
+                saveDisabled: draft.memberNodeIDs.isEmpty,
+                onCancel: { dismiss() },
+                onSave: {
                     var g = draft
                     if g.name.trimmingCharacters(in: .whitespaces).isEmpty { g.name = "群組" }
                     state.upsertGroup(g)
                     dismiss()
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .disabled(draft.memberNodeIDs.isEmpty)
-            }
+            )
             .padding(16)
         }
         .frame(width: 460, height: 540)
-        .onAppear { if let group { draft = group } }
     }
 
     private func toggle(_ id: UUID) {
@@ -368,18 +427,31 @@ struct ImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var importing = false
+    @State private var errorText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("匯入節點或訂閱")
                 .font(.headline)
-            Text("支援 ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// 分享連結、WireGuard .conf 設定檔、base64 內容，或 http(s) 訂閱網址，可一次貼多行。")
+#if APP_STORE
+            Text("支援 \(URIParser.appStoreSupportedSchemesText) 分享連結、base64 內容，或 http(s) 訂閱網址，可一次貼多行。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+#else
+            Text("支援 \(URIParser.supportedSchemesText) 分享連結、WireGuard .conf 設定檔、base64 內容，或 http(s) 訂閱網址，可一次貼多行。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+#endif
             TextEditor(text: $text)
                 .font(.body.monospaced())
                 .frame(minHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                .onChange(of: text) { _, _ in errorText = nil }
+            if let errorText {
+                Label(errorText, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }
@@ -387,9 +459,14 @@ struct ImportSheet: View {
                 Button {
                     importing = true
                     Task {
-                        await state.importText(text)
-                        importing = false
-                        dismiss()
+                        // reportFailure: false → 失敗就地顯示，不關閉 sheet、保留使用者輸入
+                        if let err = await state.importText(text, reportFailure: false) {
+                            errorText = err
+                            importing = false
+                        } else {
+                            importing = false
+                            dismiss()
+                        }
                     }
                 } label: {
                     if importing {

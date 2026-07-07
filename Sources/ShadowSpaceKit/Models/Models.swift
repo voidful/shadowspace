@@ -26,10 +26,27 @@ enum NodeProtocol: String, Codable, CaseIterable {
         case .wireguard: return "WireGuard"
         }
     }
+
+    /// SF Symbol 名稱（出口選單等處顯示協議圖示）。
+    var icon: String {
+        switch self {
+        case .shadowsocks: return "bolt.horizontal.circle"
+        case .vmess: return "v.circle"
+        case .vless: return "v.square"
+        case .trojan: return "shield"
+        case .hysteria2: return "speedometer"
+        case .tuic: return "t.circle"
+        case .anytls: return "lock.circle"
+        case .socks: return "network"
+        case .wireguard: return "point.3.connected.trianglepath.dotted"
+        }
+    }
 }
 
 // MARK: - 節點
 
+// 新增欄位時務必也加進 CodingKeys，且非 Optional 欄位一律在 init(from:) 用
+// decodeIfPresent ?? 預設值（勿用裸 decode）——否則舊 state.json 缺欄位會整包解碼失敗。
 struct ProxyNode: Codable, Identifiable, Hashable {
     var id = UUID()
     var name: String
@@ -80,6 +97,62 @@ struct ProxyNode: Codable, Identifiable, Hashable {
 
     // 來源訂閱（手動新增為 nil）
     var subscriptionID: UUID?
+
+    init(id: UUID = UUID(), name: String, proto: NodeProtocol, server: String, port: Int) {
+        self.id = id
+        self.name = name
+        self.proto = proto
+        self.server = server
+        self.port = port
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, proto, server, port
+        case method, password, uuid, alterId, security, flow, username
+        case tls, sni, insecure, alpn, fingerprint, realityPublicKey, realityShortID
+        case network, wsPath, wsHost, grpcServiceName
+        case obfs, obfsPassword, congestionControl
+        case wgPrivateKey, wgPeerPublicKey, wgPresharedKey, wgLocalAddress, wgMTU
+        case dialerNodeID, subscriptionID
+    }
+
+    // 手寫 decode：舊 state.json 缺新欄位時用預設值，避免升級後節點全失。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        proto = try c.decode(NodeProtocol.self, forKey: .proto)
+        server = try c.decode(String.self, forKey: .server)
+        port = try c.decode(Int.self, forKey: .port)
+        method = try c.decodeIfPresent(String.self, forKey: .method)
+        password = try c.decodeIfPresent(String.self, forKey: .password)
+        uuid = try c.decodeIfPresent(String.self, forKey: .uuid)
+        alterId = try c.decodeIfPresent(Int.self, forKey: .alterId)
+        security = try c.decodeIfPresent(String.self, forKey: .security)
+        flow = try c.decodeIfPresent(String.self, forKey: .flow)
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        tls = try c.decodeIfPresent(Bool.self, forKey: .tls) ?? false
+        sni = try c.decodeIfPresent(String.self, forKey: .sni)
+        insecure = try c.decodeIfPresent(Bool.self, forKey: .insecure) ?? false
+        alpn = try c.decodeIfPresent([String].self, forKey: .alpn)
+        fingerprint = try c.decodeIfPresent(String.self, forKey: .fingerprint)
+        realityPublicKey = try c.decodeIfPresent(String.self, forKey: .realityPublicKey)
+        realityShortID = try c.decodeIfPresent(String.self, forKey: .realityShortID)
+        network = try c.decodeIfPresent(String.self, forKey: .network)
+        wsPath = try c.decodeIfPresent(String.self, forKey: .wsPath)
+        wsHost = try c.decodeIfPresent(String.self, forKey: .wsHost)
+        grpcServiceName = try c.decodeIfPresent(String.self, forKey: .grpcServiceName)
+        obfs = try c.decodeIfPresent(String.self, forKey: .obfs)
+        obfsPassword = try c.decodeIfPresent(String.self, forKey: .obfsPassword)
+        congestionControl = try c.decodeIfPresent(String.self, forKey: .congestionControl)
+        wgPrivateKey = try c.decodeIfPresent(String.self, forKey: .wgPrivateKey)
+        wgPeerPublicKey = try c.decodeIfPresent(String.self, forKey: .wgPeerPublicKey)
+        wgPresharedKey = try c.decodeIfPresent(String.self, forKey: .wgPresharedKey)
+        wgLocalAddress = try c.decodeIfPresent([String].self, forKey: .wgLocalAddress)
+        wgMTU = try c.decodeIfPresent(Int.self, forKey: .wgMTU)
+        dialerNodeID = try c.decodeIfPresent(UUID.self, forKey: .dialerNodeID)
+        subscriptionID = try c.decodeIfPresent(UUID.self, forKey: .subscriptionID)
+    }
 }
 
 // MARK: - 訂閱
@@ -92,7 +165,28 @@ struct Subscription: Codable, Identifiable, Hashable {
     /// 機場回傳的 subscription-userinfo 原始字串
     var rawUserInfo: String?
 
-    /// 格式化的流量資訊，例如「已用 12.3 GB / 100 GB · 07/01 到期」
+    init(id: UUID = UUID(), name: String, url: String, lastUpdated: Date? = nil, rawUserInfo: String? = nil) {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.lastUpdated = lastUpdated
+        self.rawUserInfo = rawUserInfo
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, url, lastUpdated, rawUserInfo
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        url = try c.decode(String.self, forKey: .url)
+        lastUpdated = try c.decodeIfPresent(Date.self, forKey: .lastUpdated)
+        rawUserInfo = try c.decodeIfPresent(String.self, forKey: .rawUserInfo)
+    }
+
+    /// 格式化的流量資訊，例如「已用 12.3 GB / 100 GB · 2026/07/01 到期」
     var trafficSummary: String? {
         guard let raw = rawUserInfo else { return nil }
         var fields: [String: Int64] = [:]
@@ -113,12 +207,18 @@ struct Subscription: Codable, Identifiable, Hashable {
         }
         if let expire = fields["expire"], expire > 0 {
             let date = Date(timeIntervalSince1970: TimeInterval(expire))
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyy/MM/dd"
-            pieces.append("\(fmt.string(from: date)) 到期")
+            pieces.append("\(Self.expiryFormatter.string(from: date)) 到期")
         }
         return pieces.isEmpty ? nil : pieces.joined(separator: " · ")
     }
+
+    /// 到期日格式化器。刻意用地區中立的 yyyy/MM/dd（非 .formatted()）——
+    /// trafficSummary 是中文硬字串，混入本地化日期會在非中文系統產生突兀混排。
+    private static let expiryFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy/MM/dd"
+        return fmt
+    }()
 }
 
 // MARK: - 代理模式
@@ -225,6 +325,28 @@ struct UserRule: Codable, Identifiable, Hashable {
     var value: String = ""
     var policy: RulePolicy = .proxy
 
+    init(id: UUID = UUID(), enabled: Bool = true, type: RuleType = .domainSuffix,
+         value: String = "", policy: RulePolicy = .proxy) {
+        self.id = id
+        self.enabled = enabled
+        self.type = type
+        self.value = value
+        self.policy = policy
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, enabled, type, value, policy
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        type = try c.decodeIfPresent(RuleType.self, forKey: .type) ?? .domainSuffix
+        value = try c.decodeIfPresent(String.self, forKey: .value) ?? ""
+        policy = try c.decodeIfPresent(RulePolicy.self, forKey: .policy) ?? .proxy
+    }
+
     var values: [String] {
         value.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -261,6 +383,26 @@ struct ProxyGroup: Codable, Identifiable, Hashable {
     var name: String = "群組"
     var type: ProxyGroupType = .select
     var memberNodeIDs: [UUID] = []
+
+    init(id: UUID = UUID(), name: String = "群組", type: ProxyGroupType = .select,
+         memberNodeIDs: [UUID] = []) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.memberNodeIDs = memberNodeIDs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, type, memberNodeIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "群組"
+        type = try c.decodeIfPresent(ProxyGroupType.self, forKey: .type) ?? .select
+        memberNodeIDs = try c.decodeIfPresent([UUID].self, forKey: .memberNodeIDs) ?? []
+    }
 }
 
 // MARK: - 設定
@@ -275,6 +417,19 @@ enum EngineKind: String, Codable, CaseIterable {
         case .native: return String(localized: "原生")
         }
     }
+}
+
+/// uTLS 瀏覽器指紋的可選值（value 存進設定 / 節點，label 給 UI 顯示）。
+/// 只涵蓋「非空」的具名指紋；空字串語意依情境不同（設定＝關閉、節點＝跟隨全域），由各 View 自行附加。
+enum TLSFingerprintOptions {
+    static let browsers: [(value: String, label: String)] = [
+        ("chrome", "Chrome"),
+        ("safari", "Safari"),
+        ("firefox", "Firefox"),
+        ("edge", "Edge"),
+        ("ios", "iOS"),
+        ("randomized", String(localized: "隨機")),
+    ]
 }
 
 struct AppSettings: Codable {
@@ -298,11 +453,11 @@ struct AppSettings: Codable {
     /// 代理引擎：sing-box（完整）或 native（純原生）
     var engineKind: EngineKind = .native
     /// 拉取訂閱時的 User-Agent（機場常依此決定回傳格式）
-    var subscriptionUA = "sing-box/1.13.13"
+    var subscriptionUA = SubscriptionManager.defaultUserAgent
     /// TLS ClientHello 分片（原生引擎，抗封鎖）
     var tlsFragment = false
-    /// uTLS 指紋：sing-box 引擎於節點未帶 fp 時套用；原生引擎的自建 TLS 1.3 客戶端亦用它決定 ClientHello 指紋
-    /// （chrome/safari/firefox/edge/ios/randomized…），抗 JA3 指紋與主動探測。空字串 = sing-box 不套用。
+    /// uTLS 指紋：sing-box 引擎於節點未帶 fp 時套用；原生引擎的自建 TLS 1.3 目前僅實作 Chrome 指紋，
+    /// 其餘值視同 chrome（見 ShadowCore FingerprintPreset）。空字串 = sing-box 不套用。
     var tlsFingerprint = "chrome"
     /// 原生引擎：以自建 TLS 1.3 客戶端（可控 ClientHello、瀏覽器指紋，macOS 26+ 送後量子 X25519MLKEM768）
     /// 取代 Apple NWProtocolTLS，僅套用於 Trojan / VLESS 的 TCP+TLS 路徑（WS/wss 仍走系統 TLS）。
@@ -337,7 +492,7 @@ struct AppSettings: Codable {
         localDNS = try c.decodeIfPresent(String.self, forKey: .localDNS) ?? "223.5.5.5"
         subAutoUpdateHours = try c.decodeIfPresent(Int.self, forKey: .subAutoUpdateHours) ?? 0
         engineKind = try c.decodeIfPresent(EngineKind.self, forKey: .engineKind) ?? .native
-        subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? "sing-box/1.13.13"
+        subscriptionUA = try c.decodeIfPresent(String.self, forKey: .subscriptionUA) ?? SubscriptionManager.defaultUserAgent
         tlsFragment = try c.decodeIfPresent(Bool.self, forKey: .tlsFragment) ?? false
         tlsFingerprint = try c.decodeIfPresent(String.self, forKey: .tlsFingerprint) ?? "chrome"
         nativeTLS = try c.decodeIfPresent(Bool.self, forKey: .nativeTLS) ?? true
@@ -400,6 +555,13 @@ struct TrafficSample: Identifiable, Equatable {
     var id: Int { seq }
 }
 
+/// 引擎日誌單行。id 用遞增序號而非陣列索引——環形緩衝裁剪後索引會回捲，
+/// 導致 ForEach 認不出「最後一行」而使自動捲動失效。
+struct LogLine: Identifiable, Equatable {
+    let id: Int
+    let text: String
+}
+
 struct ConnectionInfo: Identifiable, Equatable {
     var id: String
     var target: String       // host:port
@@ -409,6 +571,9 @@ struct ConnectionInfo: Identifiable, Equatable {
     var upload: Int
     var download: Int
     var start: Date?
+
+    /// Table 排序鍵：start 為 Optional 不符 Comparable，未知時間排到最舊。
+    var startedAt: Date { start ?? .distantPast }
 
     var durationText: String {
         guard let start else { return "-" }
@@ -432,7 +597,8 @@ extension Int {
     var byteString: String { Int64(self).byteString }
     /// 速率顯示用，例如 "1.2 MB/s"
     var rateString: String { Int64(self).byteString + "/s" }
-    /// 選單列空間有限，使用較短的速率格式，例如 "1.2 MB/s"。
+    /// 選單列專用速率格式：輸出寬度穩定、且不受地區數字格式影響（ByteCountFormatter 會依地區
+    /// 加千分位/改單位間距，導致選單列文字寬度跳動）。一般畫面用 rateString 即可。
     var menuBarRateString: String {
         let bytes = Swift.max(0, self)
         guard bytes >= 1024 else { return "\(bytes) B/s" }

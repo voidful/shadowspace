@@ -4,6 +4,10 @@ import Charts
 /// 首頁：大開關 + 模式 + 目前節點 + 流量，一眼看懂、一鍵連線。
 struct HomeView: View {
     @EnvironmentObject private var state: AppState
+    @EnvironmentObject private var traffic: TrafficStatsStore
+
+    /// 首頁卡片統一寬度上限。
+    private let cardMaxWidth: CGFloat = 460
 
     var body: some View {
         ScrollView {
@@ -11,17 +15,10 @@ struct HomeView: View {
                 connectButton
                 statusText
 
-                Picker("模式", selection: Binding(
-                    get: { state.mode },
-                    set: { state.setMode($0) }
-                )) {
-                    ForEach(ProxyMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                ProxyModePicker(state: state)
+                    .labelsHidden()
+                    .frame(maxWidth: 300)
+                    .help("規則：依分流規則決定直連或代理；全域：全部走代理；直連：全部不走代理")
 
                 if state.nodes.isEmpty {
                     firstRunCard
@@ -62,8 +59,11 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(state.connectionState == .connecting || state.connectionState == .stopping)
+        .disabled(state.connectionState == .stopping)
         .animation(.easeInOut(duration: 0.25), value: state.connectionState)
+        .accessibilityLabel(state.connectionState == .connected ? "中斷連線" : "連線")
+        .accessibilityValue(state.connectionState.label)
+        .help(state.connectionState == .connected ? "中斷代理連線" : "啟動代理連線")
     }
 
     private var buttonGradient: LinearGradient {
@@ -86,17 +86,14 @@ struct HomeView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if state.connectionState == .connected {
-#if APP_STORE
-                Text("透明代理已就緒，流量正透過「\(state.selectedOutboundName)」轉送")
+                Text(state.transportStatusSentence)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-#else
-                Text(state.settings.tunMode
-                     ? "TUN 模式已接管全部流量，正透過「\(state.selectedOutboundName)」轉送"
-                     : "系統代理已就緒，流量正透過「\(state.selectedOutboundName)」轉送")
+            }
+            if state.connectionState == .connecting {
+                Text("按一下大按鈕可取消")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-#endif
             }
         }
         .multilineTextAlignment(.center)
@@ -138,41 +135,12 @@ struct HomeView: View {
         } label: {
             Text("目前出口").foregroundStyle(.secondary)
         }
-        .frame(maxWidth: 460)
+        .frame(maxWidth: cardMaxWidth)
     }
 
     private var outboundSwitchMenu: some View {
         Menu("切換") {
-            if !state.groups.isEmpty {
-                Section("群組") {
-                    ForEach(state.groups) { group in
-                        Button {
-                            state.selectNode(group.id)
-                        } label: {
-                            if group.id == state.selectedNodeID {
-                                Label(group.name, systemImage: "checkmark")
-                            } else {
-                                Text(group.name)
-                            }
-                        }
-                    }
-                }
-            }
-            if !state.nodes.isEmpty {
-                Section("節點") {
-                    ForEach(state.nodes) { candidate in
-                        Button {
-                            state.selectNode(candidate.id)
-                        } label: {
-                            if candidate.id == state.selectedNodeID {
-                                Label(candidate.name, systemImage: "checkmark")
-                            } else {
-                                Text(candidate.name)
-                            }
-                        }
-                    }
-                }
-            }
+            OutboundMenuContent(state: state)
         }
         .fixedSize()
     }
@@ -184,22 +152,22 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 32) {
                     Label {
-                        Text(state.upRate.rateString).monospacedDigit()
+                        Text(traffic.upRate.rateString).monospacedDigit()
                     } icon: {
                         Image(systemName: "arrow.up").foregroundStyle(.orange)
                     }
                     Label {
-                        Text(state.downRate.rateString).monospacedDigit()
+                        Text(traffic.downRate.rateString).monospacedDigit()
                     } icon: {
                         Image(systemName: "arrow.down").foregroundStyle(.green)
                     }
                 }
                 .font(.title3)
-                Text("本次共 ↑ \(state.sessionUpTotal.byteString) · ↓ \(state.sessionDownTotal.byteString)")
+                Text("本次共 ↑ \(traffic.sessionUpTotal.byteString) · ↓ \(traffic.sessionDownTotal.byteString)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
-                if state.trafficHistory.count > 1 {
+                if traffic.trafficHistory.count > 1 {
                     trafficChart
                 }
             }
@@ -208,23 +176,23 @@ struct HomeView: View {
         } label: {
             Text("即時流量").foregroundStyle(.secondary)
         }
-        .frame(maxWidth: 460)
+        .frame(maxWidth: cardMaxWidth)
     }
 
     /// 即時流量折線圖（上傳橘、下載綠），X 軸為取樣序號。
     private var trafficChart: some View {
         Chart {
-            ForEach(state.trafficHistory) { s in
+            ForEach(traffic.trafficHistory) { s in
                 AreaMark(x: .value("序", s.seq), y: .value("速率", s.down))
                     .foregroundStyle(.green.opacity(0.12))
                     .interpolationMethod(.monotone)
             }
-            ForEach(state.trafficHistory) { s in
+            ForEach(traffic.trafficHistory) { s in
                 LineMark(x: .value("序", s.seq), y: .value("速率", s.down))
                     .foregroundStyle(by: .value("方向", "下載"))
                     .interpolationMethod(.monotone)
             }
-            ForEach(state.trafficHistory) { s in
+            ForEach(traffic.trafficHistory) { s in
                 LineMark(x: .value("序", s.seq), y: .value("速率", s.up))
                     .foregroundStyle(by: .value("方向", "上傳"))
                     .interpolationMethod(.monotone)
@@ -254,7 +222,7 @@ struct HomeView: View {
                     .font(.headline)
                 VStack(alignment: .leading, spacing: 8) {
 #if APP_STORE
-                    Text("1. 複製你的節點分享連結（ss://、trojan://、vless://、socks://）或訂閱網址")
+                    Text("1️⃣  複製你的節點分享連結（ss://、trojan://、vless://、socks://）或訂閱網址")
 #else
                     Text("1️⃣  複製你的節點分享連結（ss:// vmess:// trojan://…）或機場訂閱網址")
 #endif
@@ -263,16 +231,12 @@ struct HomeView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                Button {
-                    Task { await state.importFromClipboard() }
-                } label: {
-                    Label("從剪貼簿匯入", systemImage: "doc.on.clipboard")
-                }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
+                ImportFromClipboardButton(state: state)
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
             }
             .padding(10)
         }
-        .frame(maxWidth: 460)
+        .frame(maxWidth: cardMaxWidth)
     }
 }

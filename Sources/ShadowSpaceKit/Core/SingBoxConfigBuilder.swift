@@ -31,19 +31,10 @@ enum SingBoxConfigBuilder {
                       rules userRules: [UserRule] = []) -> BuildResult {
 
         // --- 唯一化 outbound tag ---
-        var tagByNodeID: [UUID: String] = [:]
         var usedTags: Set<String> = [selectorTag, autoTag, directTag]
+        var tagByNodeID: [UUID: String] = [:]
         for node in nodes {
-            var base = node.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if base.isEmpty { base = "\(node.server):\(node.port)" }
-            var tag = base
-            var n = 2
-            while usedTags.contains(tag) {
-                tag = "\(base) \(n)"
-                n += 1
-            }
-            usedTags.insert(tag)
-            tagByNodeID[node.id] = tag
+            tagByNodeID[node.id] = uniqueTag(node.name, fallback: "\(node.server):\(node.port)", used: &usedTags)
         }
 
         let nodeTags = nodes.compactMap { tagByNodeID[$0.id] }
@@ -51,13 +42,7 @@ enum SingBoxConfigBuilder {
         // --- 群組 tag（避免與節點 / 保留字衝突）---
         var tagByGroupID: [UUID: String] = [:]
         for group in groups {
-            var base = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if base.isEmpty { base = "群組" }
-            var tag = base
-            var n = 2
-            while usedTags.contains(tag) { tag = "\(base) \(n)"; n += 1 }
-            usedTags.insert(tag)
-            tagByGroupID[group.id] = tag
+            tagByGroupID[group.id] = uniqueTag(group.name, fallback: "群組", used: &usedTags)
         }
         // 只保留至少有一個有效成員的群組
         let validGroups = groups.filter { group in
@@ -95,6 +80,7 @@ enum SingBoxConfigBuilder {
         // 使用者自訂群組
         for group in validGroups {
             let memberTags = group.memberNodeIDs.compactMap { tagByNodeID[$0] }
+            guard !memberTags.isEmpty else { continue }   // 保護 .select 的 first! 與 .urltest 空成員
             let gtag = tagByGroupID[group.id]!
             switch group.type {
             case .select:
@@ -269,6 +255,20 @@ enum SingBoxConfigBuilder {
 
     static func jsonData(_ config: [String: Any]) throws -> Data {
         try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    /// 產生不與 used 衝突的唯一 tag（名稱空白時用 fallback），衝突時附加序號並登記到 used。
+    private static func uniqueTag(_ rawName: String, fallback: String, used: inout Set<String>) -> String {
+        var base = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.isEmpty { base = fallback }
+        var tag = base
+        var n = 2
+        while used.contains(tag) {
+            tag = "\(base) \(n)"
+            n += 1
+        }
+        used.insert(tag)
+        return tag
     }
 
     // MARK: - 自訂規則 → 路由規則
