@@ -28,13 +28,16 @@ enum ImportService {
         return decoded.isEmpty ? .unrecognized : .payload(decoded)
     }
 
-    /// 從剪貼簿圖片掃 QR Code。回傳 nil = 剪貼簿沒有圖片；回傳 [] = 有圖但找不到 QR。
-    static func qrPayloadsFromClipboard() -> [String]? {
+    /// AppKit 剪貼簿讀取留在 MainActor，先轉成可安全送往背景工作的資料。
+    static func qrImageDataFromClipboard() -> Data? {
         guard let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self])?.first as? NSImage,
-              let tiff = image.tiffRepresentation,
-              let ci = CIImage(data: tiff) else {
-            return nil
-        }
+              let tiff = image.tiffRepresentation else { return nil }
+        return tiff
+    }
+
+    /// CoreImage 偵測可能需要明顯 CPU 時間，呼叫端可把這段送到背景執行。
+    static func qrPayloads(imageData: Data) -> [String] {
+        guard let ci = CIImage(data: imageData) else { return [] }
         let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
                                   options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
         return (detector?.features(in: ci) ?? [])

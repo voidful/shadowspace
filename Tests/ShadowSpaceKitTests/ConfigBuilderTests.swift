@@ -229,6 +229,97 @@ final class ConfigBuilderTests: XCTestCase {
         let dot = SingBoxConfigBuilder.dnsServerDict(tag: "t", spec: "tls://9.9.9.9", detour: nil)
         XCTAssertEqual(dot["type"] as? String, "tls")
         XCTAssertEqual(dot["server"] as? String, "9.9.9.9")
+
+        let doh3 = SingBoxConfigBuilder.dnsServerDict(
+            tag: "h3", spec: "h3://dns.google/dns-query", detour: "PROXY",
+            domainResolver: "dns-bootstrap")
+        XCTAssertEqual(doh3["type"] as? String, "h3")
+        XCTAssertEqual(doh3["server"] as? String, "dns.google")
+        XCTAssertEqual(doh3["detour"] as? String, "PROXY")
+        XCTAssertEqual(doh3["domain_resolver"] as? String, "dns-bootstrap")
+    }
+
+    func testTailscaleAndMagicDNSConfig() {
+        let a = makeNode(name: "n")
+        var settings = AppSettings()
+        settings.tailscaleEnabled = true
+        settings.tailscaleMagicDNS = true
+        settings.tailscaleAuthKey = "tskey-auth-test"
+        settings.tailscaleHostname = "shadowspace-mac"
+        settings.tailscaleExitNode = "exit.example.ts.net"
+
+        let result = SingBoxConfigBuilder.build(
+            nodes: [a], selectedID: a.id, settings: settings, mode: .rule)
+
+        let endpoints = result.json["endpoints"] as? [[String: Any]] ?? []
+        let tailscale = endpoints.first { ($0["type"] as? String) == "tailscale" }
+        XCTAssertEqual(tailscale?["tag"] as? String, SingBoxConfigBuilder.tailscaleTag)
+        XCTAssertEqual(tailscale?["auth_key"] as? String, "tskey-auth-test")
+        XCTAssertEqual(tailscale?["hostname"] as? String, "shadowspace-mac")
+        XCTAssertEqual(tailscale?["exit_node"] as? String, "exit.example.ts.net")
+
+        let dns = result.json["dns"] as? [String: Any]
+        let servers = dns?["servers"] as? [[String: Any]] ?? []
+        XCTAssertTrue(servers.contains {
+            ($0["type"] as? String) == "tailscale" &&
+            ($0["endpoint"] as? String) == SingBoxConfigBuilder.tailscaleTag
+        })
+
+        let route = result.json["route"] as? [String: Any]
+        let rules = route?["rules"] as? [[String: Any]] ?? []
+        let tailscaleIndex = rules.firstIndex {
+            ($0["outbound"] as? String) == SingBoxConfigBuilder.tailscaleTag
+        }
+        let privateIndex = rules.firstIndex { ($0["ip_is_private"] as? Bool) == true }
+        XCTAssertNotNil(tailscaleIndex)
+        XCTAssertNotNil(privateIndex)
+        XCTAssertLessThan(tailscaleIndex!, privateIndex!, "Tailscale route 必須優先於私有 IP 直連")
+    }
+
+    func testURLTestTuningAppliedToAutoAndCustomGroups() {
+        let a = makeNode(name: "a")
+        let b = makeNode(name: "b", server: "5.6.7.8")
+        let group = ProxyGroup(name: "最快", type: .urltest, memberNodeIDs: [a.id, b.id])
+        var settings = AppSettings()
+        settings.latencyTestURL = "https://example.com/ping"
+        settings.latencyTestIntervalMinutes = 3
+        settings.latencyTestToleranceMS = 120
+
+        let result = SingBoxConfigBuilder.build(
+            nodes: [a, b], selectedID: group.id, settings: settings, mode: .rule,
+            groups: [group])
+        let outbounds = result.json["outbounds"] as? [[String: Any]] ?? []
+        let tests = outbounds.filter { ($0["type"] as? String) == "urltest" }
+        XCTAssertEqual(tests.count, 2)
+        for test in tests {
+            XCTAssertEqual(test["url"] as? String, "https://example.com/ping")
+            XCTAssertEqual(test["interval"] as? String, "3m")
+            XCTAssertEqual(test["tolerance"] as? Int, 120)
+            XCTAssertEqual(test["idle_timeout"] as? String, "30m")
+        }
+    }
+
+    func testGeneratedTailscaleDoH3ConfigPassesInstalledSingBoxCheck() throws {
+        guard let binary = EngineManager.findBinary() else {
+            throw XCTSkip("本機未安裝 sing-box，略過核心語法檢查")
+        }
+        let a = makeNode(name: "n")
+        var settings = AppSettings()
+        settings.tailscaleEnabled = true
+        settings.tailscaleMagicDNS = true
+        settings.remoteDNS = "h3://dns.google/dns-query"
+        settings.chinaDirect = false
+
+        let result = SingBoxConfigBuilder.build(
+            nodes: [a], selectedID: a.id, settings: settings, mode: .rule)
+        let data = try SingBoxConfigBuilder.jsonData(result.json)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shadowspace-config-\(UUID().uuidString).json")
+        try data.write(to: url, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let (status, output) = EngineManager.runProcess(binary, ["check", "-c", url.path])
+        XCTAssertEqual(status, 0, output)
     }
 
     func testSubscriptionTrafficSummary() {

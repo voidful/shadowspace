@@ -13,6 +13,8 @@ public struct ShadowSpaceRoot: App {
             MainWindow()
                 .environmentObject(state)
                 .environmentObject(state.traffic)
+                .environmentObject(state.logs)
+                .environmentObject(state.connectionStats)
                 .frame(minWidth: 700, minHeight: 460)
                 .onOpenURL { state.handleURL($0) }
         }

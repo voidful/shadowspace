@@ -11,6 +11,8 @@ PROJECT_PATH = File.join(PROJECT_DIR, "ShadowSpace.xcodeproj")
 DEPLOYMENT_TARGET = "14.0"
 APP_BUNDLE_ID = "com.voidful.shadowspace"
 EXTENSION_BUNDLE_ID = "com.voidful.shadowspace.ShadowTunnel"
+RELEASE_VERSION = File.read(File.join(ROOT, "VERSION")).strip
+BUILD_NUMBER = File.read(File.join(ROOT, "BUILD_NUMBER")).strip
 
 def repo_path(path)
   File.join(ROOT, path)
@@ -84,8 +86,8 @@ core_target.build_configurations.each do |config|
   config.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "#{APP_BUNDLE_ID}.ShadowCore"
   config.build_settings["DEFINES_MODULE"] = "YES"
   config.build_settings["GENERATE_INFOPLIST_FILE"] = "YES"
-  config.build_settings["MARKETING_VERSION"] = "0.2.1"
-  config.build_settings["CURRENT_PROJECT_VERSION"] = "3"
+  config.build_settings["MARKETING_VERSION"] = RELEASE_VERSION
+  config.build_settings["CURRENT_PROJECT_VERSION"] = BUILD_NUMBER
   config.build_settings["INSTALL_PATH"] = "@rpath"
   config.build_settings["SKIP_INSTALL"] = "YES"
 end
@@ -94,8 +96,8 @@ kit_target.build_configurations.each do |config|
   config.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "#{APP_BUNDLE_ID}.ShadowSpaceKit"
   config.build_settings["DEFINES_MODULE"] = "YES"
   config.build_settings["GENERATE_INFOPLIST_FILE"] = "YES"
-  config.build_settings["MARKETING_VERSION"] = "0.2.1"
-  config.build_settings["CURRENT_PROJECT_VERSION"] = "3"
+  config.build_settings["MARKETING_VERSION"] = RELEASE_VERSION
+  config.build_settings["CURRENT_PROJECT_VERSION"] = BUILD_NUMBER
   config.build_settings["INSTALL_PATH"] = "@rpath"
   config.build_settings["SKIP_INSTALL"] = "YES"
   config.build_settings["OTHER_SWIFT_FLAGS"] = "$(inherited) -D APP_STORE -D SHADOWSPACE_APP"
@@ -104,6 +106,8 @@ end
 
 extension_target.build_configurations.each do |config|
   config.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = EXTENSION_BUNDLE_ID
+  config.build_settings["MARKETING_VERSION"] = RELEASE_VERSION
+  config.build_settings["CURRENT_PROJECT_VERSION"] = BUILD_NUMBER
   config.build_settings["INFOPLIST_FILE"] = "ShadowTunnel/Info.plist"
   config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "entitlements/ShadowTunnel.entitlements"
   config.build_settings["APPLICATION_EXTENSION_API_ONLY"] = "YES"
@@ -114,6 +118,8 @@ end
 
 app_target.build_configurations.each do |config|
   config.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = APP_BUNDLE_ID
+  config.build_settings["MARKETING_VERSION"] = RELEASE_VERSION
+  config.build_settings["CURRENT_PROJECT_VERSION"] = BUILD_NUMBER
   config.build_settings["INFOPLIST_FILE"] = "ShadowSpace-Info.plist"
   config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "entitlements/ShadowSpace.appstore.entitlements"
   config.build_settings["OTHER_SWIFT_FLAGS"] = "$(inherited) -D APP_STORE"

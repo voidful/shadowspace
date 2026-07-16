@@ -428,6 +428,10 @@ enum TLSFingerprintOptions {
         ("firefox", "Firefox"),
         ("edge", "Edge"),
         ("ios", "iOS"),
+        ("android", "Android"),
+        ("360", "360 Secure Browser"),
+        ("qq", "QQ Browser"),
+        ("random", String(localized: "隨機指紋")),
         ("randomized", String(localized: "隨機")),
     ]
 }
@@ -469,12 +473,42 @@ struct AppSettings: Codable {
     /// 啟動時自動檢查更新（GitHub Releases）
     var autoCheckUpdates = true
 
+    // Tailscale 私有組網（sing-box 1.12+ endpoint）
+    var tailscaleEnabled = false
+    var tailscaleMagicDNS = true
+    var tailscaleAuthKey = ""
+    var tailscaleControlURL = ""
+    var tailscaleHostname = "ShadowSpace"
+    var tailscaleAcceptRoutes = true
+    var tailscaleExitNode = ""
+    var tailscaleExitNodeAllowLAN = true
+
+    // 大型代理群組 / 手動批次測速
+    var latencyTestURL = "https://www.gstatic.com/generate_204"
+    var latencyTestIntervalMinutes = 5
+    var latencyTestToleranceMS = 50
+    var latencyTestConcurrency = 16
+
+    var effectiveLatencyTestURL: String {
+        let value = latencyTestURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else {
+            return "https://www.gstatic.com/generate_204"
+        }
+        return value
+    }
+
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mixedPort, apiPort, apiSecret, allowLAN, autoSystemProxy
         case tunMode, adBlock, chinaDirect, remoteDNS, localDNS, subAutoUpdateHours, engineKind
         case subscriptionUA, tlsFragment, tlsFingerprint, nativeTLS, autoConnect, killSwitch, autoCheckUpdates
+        case tailscaleEnabled, tailscaleMagicDNS, tailscaleAuthKey, tailscaleControlURL
+        case tailscaleHostname, tailscaleAcceptRoutes, tailscaleExitNode, tailscaleExitNodeAllowLAN
+        case latencyTestURL, latencyTestIntervalMinutes, latencyTestToleranceMS, latencyTestConcurrency
     }
 
     // 手寫 decode：舊版設定檔缺新欄位時用預設值，避免升級後設定全失
@@ -499,6 +533,19 @@ struct AppSettings: Codable {
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         autoCheckUpdates = try c.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
+        tailscaleEnabled = try c.decodeIfPresent(Bool.self, forKey: .tailscaleEnabled) ?? false
+        tailscaleMagicDNS = try c.decodeIfPresent(Bool.self, forKey: .tailscaleMagicDNS) ?? true
+        tailscaleAuthKey = try c.decodeIfPresent(String.self, forKey: .tailscaleAuthKey) ?? ""
+        tailscaleControlURL = try c.decodeIfPresent(String.self, forKey: .tailscaleControlURL) ?? ""
+        tailscaleHostname = try c.decodeIfPresent(String.self, forKey: .tailscaleHostname) ?? "ShadowSpace"
+        tailscaleAcceptRoutes = try c.decodeIfPresent(Bool.self, forKey: .tailscaleAcceptRoutes) ?? true
+        tailscaleExitNode = try c.decodeIfPresent(String.self, forKey: .tailscaleExitNode) ?? ""
+        tailscaleExitNodeAllowLAN = try c.decodeIfPresent(Bool.self, forKey: .tailscaleExitNodeAllowLAN) ?? true
+        latencyTestURL = try c.decodeIfPresent(String.self, forKey: .latencyTestURL)
+            ?? "https://www.gstatic.com/generate_204"
+        latencyTestIntervalMinutes = try c.decodeIfPresent(Int.self, forKey: .latencyTestIntervalMinutes) ?? 5
+        latencyTestToleranceMS = try c.decodeIfPresent(Int.self, forKey: .latencyTestToleranceMS) ?? 50
+        latencyTestConcurrency = try c.decodeIfPresent(Int.self, forKey: .latencyTestConcurrency) ?? 16
     }
 }
 

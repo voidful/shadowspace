@@ -3,6 +3,26 @@ import XCTest
 
 final class SystemProxyTests: XCTestCase {
 
+    private final class OperationRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var enableCount = 0
+        private(set) var disableCount = 0
+        private(set) var enableRanOnMainThread = false
+
+        func recordEnable() {
+            lock.lock()
+            enableCount += 1
+            enableRanOnMainThread = Thread.isMainThread
+            lock.unlock()
+        }
+
+        func recordDisable() {
+            lock.lock()
+            disableCount += 1
+            lock.unlock()
+        }
+    }
+
     /// 代理伺服器主機要被加進繞過清單（否則原生引擎連往伺服器會被系統代理繞回 → 迴圈 → 沒網路）。
     func testBypassDomainsIncludesProxyServerAndDedups() {
         let list = SystemProxyManager.bypassDomains(["th.t2.lol", "th.t2.lol", "  ", "localhost"])
@@ -62,5 +82,32 @@ final class SystemProxyTests: XCTestCase {
         SystemProxyManager.runProcess = fakeNetworksetup(
             webProxyLine: "Enabled: Yes\nServer: 10.0.0.9\nPort: 8080\n")
         XCTAssertFalse(SystemProxyManager.residualProxyDetected())
+    }
+
+    func testProxyControllerRunsOffMainAndSkipsIdenticalConfiguration() async throws {
+        let recorder = OperationRecorder()
+        let controller = SystemProxyController(
+            queueLabel: "shadowspace.system-proxy.test",
+            enableOperation: { _, _ in recorder.recordEnable() },
+            disableOperation: { recorder.recordDisable() },
+            networkIdentity: { "Wi-Fi" })
+
+        let firstApplied = try await controller.enableIfNeeded(
+            port: 7_890, bypassHosts: ["proxy.example", "proxy.example"])
+        let secondApplied = try await controller.enableIfNeeded(
+            port: 7_890, bypassHosts: ["proxy.example"])
+
+        XCTAssertTrue(firstApplied)
+        XCTAssertFalse(secondApplied)
+        XCTAssertEqual(recorder.enableCount, 1)
+        XCTAssertFalse(recorder.enableRanOnMainThread)
+
+        await controller.disable()
+        XCTAssertEqual(recorder.disableCount, 1)
+
+        let reapplied = try await controller.enableIfNeeded(
+            port: 7_890, bypassHosts: ["proxy.example"])
+        XCTAssertTrue(reapplied)
+        XCTAssertEqual(recorder.enableCount, 2)
     }
 }

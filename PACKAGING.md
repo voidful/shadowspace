@@ -62,13 +62,13 @@ make release SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)"
 4. 打包並簽署 `ShadowSpace-<版本>.dmg`
 5. 公證 DMG 並 staple
 
-完成後得到 `build/ShadowSpace-0.2.1.dmg`，可直接散佈。
+完成後得到 `build/ShadowSpace-<版本>.dmg`，可直接散佈。
 
 ### 驗證成品
 
 ```bash
 spctl -a -vvv --type execute build/ShadowSpace.app   # 應顯示 accepted / Notarized Developer ID
-xcrun stapler validate build/ShadowSpace-0.2.1.dmg   # 應顯示 The validate action worked
+xcrun stapler validate build/ShadowSpace-<版本>.dmg   # 應顯示 The validate action worked
 ```
 
 ---
@@ -88,7 +88,7 @@ make dmg SIGN_IDENTITY="Developer ID Application: ..."   # 只打包 DMG
 
 ## 發版前檢查清單
 
-- [ ] 更新 `Resources/Info.plist` 的 `CFBundleShortVersionString` 與 `CFBundleVersion`
+- [ ] 更新根目錄 `VERSION` 與 `BUILD_NUMBER`（一般版與 App Store 專案共用）
 - [ ] `make test` 全綠
 - [ ] `make engine` 確認核心為最新版
 - [ ] （建議）加上 App 圖示，見下方

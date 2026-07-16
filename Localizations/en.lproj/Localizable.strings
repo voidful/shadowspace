@@ -91,6 +91,36 @@
 "產生的 sing-box 設定" = "Generated sing-box config";
 "開啟設定資料夾" = "Open settings folder";
 
+/* Network toolbox */
+"自訂值支援 IP、https://（DoH）、h3://（DoH3）與 tls://（DoT）。遠端 DNS 透過代理解析，避免 DNS 污染。" = "Custom values support IP, https:// (DoH), h3:// (DoH3), and tls:// (DoT). Remote DNS resolves through the proxy to avoid DNS pollution.";
+"例如 9.9.9.9 或 h3://dns.example.com/dns-query" = "e.g. 9.9.9.9 or h3://dns.example.com/dns-query";
+"私有組網" = "Private networking";
+"啟用 Tailscale 私有組網" = "Enable Tailscale private networking";
+"直接在核心加入此 Mac 到 tailnet；可安全存取家中電腦、NAS 與私有服務。" = "Join this Mac to your tailnet in the core, for secure access to home computers, NAS devices, and private services.";
+"使用 MagicDNS" = "Use MagicDNS";
+"接受其他裝置公告的子網路路由" = "Accept subnet routes advertised by other devices";
+"裝置名稱" = "Device name";
+"驗證金鑰（可空）" = "Auth key (optional)";
+"登入網址會顯示在日誌" = "Login URL will appear in Logs";
+"控制伺服器（可空）" = "Control server (optional)";
+"Exit Node（可空）" = "Exit node (optional)";
+"裝置名稱或 Tailscale IP" = "Device name or Tailscale IP";
+"使用 Exit Node 時仍可存取區域網路" = "Allow LAN access while using an exit node";
+"開啟 Tailscale 登入" = "Open Tailscale login";
+"需要 sing-box 1.12 以上。驗證金鑰留空時，連線後請到「日誌」開啟 Tailscale 登入網址；登入狀態會保存在 ShadowSpace 設定資料夾。" = "Requires sing-box 1.12 or later. If the auth key is empty, connect and open the Tailscale login URL in Logs. Login state is saved in the ShadowSpace settings folder.";
+"測速" = "Speed test";
+"測試網址" = "Test URL";
+"自動群組重測間隔" = "Auto-group retest interval";
+"每 1 分鐘" = "Every minute";
+"每 3 分鐘" = "Every 3 minutes";
+"每 5 分鐘" = "Every 5 minutes";
+"每 10 分鐘" = "Every 10 minutes";
+"每 30 分鐘" = "Every 30 minutes";
+"切換容差" = "Switch tolerance";
+"批次測速並行數" = "Concurrent batch tests";
+"自動最快群組使用 HTTPS 真實請求與切換容差，避免大量節點因幾毫秒抖動頻繁換線；手動批次測速最多可並行 64 個節點。" = "Auto-fastest groups use real HTTPS requests and a switch tolerance to prevent frequent changes from tiny latency fluctuations; manual batch testing supports up to 64 concurrent nodes.";
+"隨機指紋" = "Random fingerprint";
+
 /* Tabs / sections */
 "首頁" = "Home";
 "節點" = "Nodes";

@@ -132,7 +132,9 @@ struct ServersView: View {
     // MARK: - 清單
 
     private var nodeList: some View {
-        List(selection: Binding(
+        // 搜尋與排序只做一次，再依訂閱 ID 線性分組；避免每個訂閱都重新掃描整份節點清單。
+        let groupedNodes = Dictionary(grouping: displayNodes(state.nodes), by: \ProxyNode.subscriptionID)
+        return List(selection: Binding(
             get: { state.selectedNodeID },
             set: { if let id = $0 { state.selectNode(id) } }
         )) {
@@ -144,7 +146,7 @@ struct ServersView: View {
                 }
             }
             ForEach(state.subscriptions) { sub in
-                let subNodes = displayNodes(state.nodes.filter { $0.subscriptionID == sub.id })
+                let subNodes = groupedNodes[Optional(sub.id)] ?? []
                 if !subNodes.isEmpty {
                     Section {
                         nodeRows(subNodes)
@@ -153,7 +155,7 @@ struct ServersView: View {
                     }
                 }
             }
-            let manualNodes = displayNodes(state.nodes.filter { $0.subscriptionID == nil })
+            let manualNodes = groupedNodes[nil] ?? []
             if !manualNodes.isEmpty {
                 Section("手動新增") {
                     nodeRows(manualNodes)

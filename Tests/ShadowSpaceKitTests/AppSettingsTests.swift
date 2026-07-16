@@ -17,6 +17,45 @@ final class AppSettingsTests: XCTestCase {
 
         let settings = try JSONDecoder().decode(AppSettings.self, from: data)
         XCTAssertEqual(settings.engineKind, .native)
+        XCTAssertFalse(settings.tailscaleEnabled)
+        XCTAssertTrue(settings.tailscaleMagicDNS)
+        XCTAssertEqual(settings.latencyTestConcurrency, 16)
+        XCTAssertEqual(settings.latencyTestURL, "https://www.gstatic.com/generate_204")
+    }
+
+    func testNetworkToolboxSettingsRoundTrip() throws {
+        var original = AppSettings()
+        original.tailscaleEnabled = true
+        original.tailscaleAuthKey = "secret"
+        original.tailscaleExitNode = "100.64.0.1"
+        original.latencyTestIntervalMinutes = 3
+        original.latencyTestToleranceMS = 100
+        original.latencyTestConcurrency = 32
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        XCTAssertTrue(decoded.tailscaleEnabled)
+        XCTAssertEqual(decoded.tailscaleAuthKey, "secret")
+        XCTAssertEqual(decoded.tailscaleExitNode, "100.64.0.1")
+        XCTAssertEqual(decoded.latencyTestIntervalMinutes, 3)
+        XCTAssertEqual(decoded.latencyTestToleranceMS, 100)
+        XCTAssertEqual(decoded.latencyTestConcurrency, 32)
+    }
+
+    func testTailscaleLoginURLExtraction() {
+        let url = AppState.tailscaleLoginURL(in: [
+            "[info] tailscale: To authenticate, visit: https://login.tailscale.com/a/abc123",
+        ])
+        XCTAssertEqual(url?.absoluteString, "https://login.tailscale.com/a/abc123")
+        XCTAssertNil(AppState.tailscaleLoginURL(in: ["[info] ordinary proxy log https://example.com"]))
+    }
+
+    func testInvalidLatencyURLFallsBackSafely() {
+        var settings = AppSettings()
+        settings.latencyTestURL = "not a URL"
+        XCTAssertEqual(settings.effectiveLatencyTestURL, "https://www.gstatic.com/generate_204")
+        settings.latencyTestURL = "https://example.com/ping"
+        XCTAssertEqual(settings.effectiveLatencyTestURL, "https://example.com/ping")
     }
 
     func testMenuBarRateStringIsCompact() {

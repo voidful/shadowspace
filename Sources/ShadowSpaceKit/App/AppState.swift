@@ -3,6 +3,97 @@ import SwiftUI
 import AppKit
 import ShadowCore
 
+/// 狀態存檔專用序列佇列。短時間連續要求只寫入最新快照，JSON 編碼與原子寫檔
+/// 都不佔用 MainActor；App 結束時可同步 flush 最後快照。
+final class StatePersistenceWriter: @unchecked Sendable {
+    private struct Payload: @unchecked Sendable {
+        let state: PersistedState
+    }
+
+    private let url: URL
+    private let queue = DispatchQueue(label: "shadowspace.state-persistence", qos: .utility)
+    private let lock = NSLock()
+    private var generation = 0
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func enqueue(_ state: PersistedState) {
+        let token = nextGeneration()
+        let payload = Payload(state: state)
+        queue.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+            guard let self, self.isCurrent(token) else { return }
+            self.persist(payload.state)
+        }
+    }
+
+    func flush(_ state: PersistedState) {
+        _ = nextGeneration() // 讓尚未執行的舊快照失效
+        let payload = Payload(state: state)
+        queue.sync { persist(payload.state) }
+    }
+
+    private func nextGeneration() -> Int {
+        lock.lock()
+        generation &+= 1
+        let value = generation
+        lock.unlock()
+        return value
+    }
+
+    private func isCurrent(_ token: Int) -> Bool {
+        lock.lock()
+        let current = generation == token
+        lock.unlock()
+        return current
+    }
+
+    private func persist(_ state: PersistedState) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            let data = try encoder.encode(state)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            NSLog("ShadowSpace: 狀態儲存失敗 %@", error.localizedDescription)
+        }
+    }
+}
+
+/// 匯入去重只比對既有行為使用的四個欄位，但改用 Set 將大型清單從 O(n²) 降為 O(n)。
+private struct NodeDedupKey: Hashable {
+    let server: String
+    let port: Int
+    let proto: String
+    let name: String
+
+    init(_ node: ProxyNode) {
+        server = node.server
+        port = node.port
+        proto = node.proto.rawValue
+        name = node.name
+    }
+}
+
+#if !APP_STORE
+/// 把設定建構的輸入與輸出包成不可變工作單，讓大型節點清單可安全在背景產生 JSON。
+private struct SingBoxBuildWork: @unchecked Sendable {
+    let nodes: [ProxyNode]
+    let selectedID: UUID?
+    let settings: AppSettings
+    let mode: ProxyMode
+    let groups: [ProxyGroup]
+    let rules: [UserRule]
+}
+
+private struct PreparedSingBoxConfig: @unchecked Sendable {
+    let data: Data
+    let tagByNodeID: [UUID: String]
+    let tagByGroupID: [UUID: String]
+}
+#endif
+
 /// App 的中央狀態：節點、訂閱、規則、連線生命週期、流量統計。
 @MainActor
 final class AppState: ObservableObject {
@@ -24,15 +115,11 @@ final class AppState: ObservableObject {
     @Published var connectionState: ConnectionState = .disconnected
     /// 即時流量統計獨立成 store，避免每秒更新重繪整個 App（見 TrafficStatsStore）。
     let traffic = TrafficStatsStore()
+    /// 高頻日誌與連線清單也各自隔離，避免它們發布時讓整個主視窗重繪。
+    let logs = EngineLogStore()
+    let connectionStats = ConnectionStatsStore()
     @Published var latencies: [UUID: Int] = [:]   // ms；測過但失敗 = -1
     @Published var isPinging = false
-
-    @Published var connections: [ConnectionInfo] = []
-    @Published var connUploadTotal = 0
-    @Published var connDownloadTotal = 0
-
-    @Published var engineLog: [LogLine] = []
-    private var logSeq = 0
     @Published var engineVersion: String?         // sing-box 版本；bootstrap() 於背景查得後填入
     @Published var engineInstallStatus: String?   // 下載引擎時的進度文字
     @Published var isInstallingEngine = false
@@ -51,6 +138,9 @@ final class AppState: ObservableObject {
     private var connectionsTask: Task<Void, Never>?
     private var autoUpdateTask: Task<Void, Never>?
     private var connectTask: Task<Void, Never>?    // 使用者手動連線的 Task，可取消
+    private var persistenceTask: Task<Void, Never>?
+    private var proxyReapplyTask: Task<Void, Never>?
+    private lazy var persistenceWriter = StatePersistenceWriter(url: Self.stateURL)
     private var pendingRestart = false              // 連線/停止中收到的重啟請求，完成後補做
     private var applyGeneration = 0                 // saveAndApply 防抖世代計數
     private var didBootstrap = false
@@ -60,6 +150,7 @@ final class AppState: ObservableObject {
     private var tagByNodeID: [UUID: String] = [:]
     private var tagByGroupID: [UUID: String] = [:]
     private var systemProxyActive = false
+    private let systemProxyController = SystemProxyController()
 
     private var api: ClashAPIClient {
         ClashAPIClient(port: settings.apiPort, secret: settings.apiSecret)
@@ -107,6 +198,21 @@ final class AppState: ObservableObject {
         }
         return "系統代理已就緒，流量正透過「\(selectedOutboundName)」轉送"
 #endif
+    }
+
+    /// sing-box Tailscale endpoint 在未登入時會把驗證網址寫進日誌；抽出來讓設定頁可直接開啟。
+    nonisolated static func tailscaleLoginURL(in lines: [String]) -> URL? {
+        for text in lines.reversed() {
+            let lower = text.lowercased()
+            guard lower.contains("tailscale") || lower.contains("authenticate") || lower.contains("login") else {
+                continue
+            }
+            guard let range = text.range(of: #"https://[^\s\]\)\}\"]+"#,
+                                         options: .regularExpression) else { continue }
+            let value = String(text[range]).trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+            if let url = URL(string: value) { return url }
+        }
+        return nil
     }
 
     /// 系統代理需繞過的主機：所有節點的伺服器位址。
@@ -157,13 +263,13 @@ final class AppState: ObservableObject {
             selectedNodeID = persisted.selectedNodeID
         }
 #if !APP_STORE
-        engine.onLog = { [weak self] line in
-            Task { @MainActor in self?.appendLog(line) }
+        engine.onLog = { [weak self] lines in
+            Task { @MainActor in self?.logs.append(contentsOf: lines) }
         }
         engine.onUnexpectedExit = { [weak self] status in
             Task { @MainActor in
                 guard let self, self.connectionState == .connected || self.connectionState == .connecting else { return }
-                self.handleUnexpectedExit(status: status)
+                await self.handleUnexpectedExit(status: status)
             }
         }
 #endif
@@ -231,7 +337,7 @@ final class AppState: ObservableObject {
     func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
         Binding(
             get: { self.settings[keyPath: keyPath] },
-            set: { self.settings[keyPath: keyPath] = $0; self.save() }
+            set: { self.settings[keyPath: keyPath] = $0; self.scheduleSave() }
         )
     }
 
@@ -243,18 +349,21 @@ final class AppState: ObservableObject {
         )
     }
 
-    /// 原子寫入落盤；編碼/寫檔失敗會記錄而非無聲吞掉。
-    /// 只在離散使用者動作（匯入/編輯/刪除/切換）時呼叫，非熱路徑，同步寫入即可，
-    /// 也確保強制結束/閃退前變更已落地（防抖會留下遺失資料的空窗）。
+    /// 將不可變快照交給背景序列佇列；JSON 編碼與原子寫檔不阻塞主執行緒。
+    /// 佇列會合併短時間內的連續要求，只落盤最新狀態。
     func save() {
-        guard let data = Self.encodeState(snapshot()) else {
-            NSLog("ShadowSpace: 狀態編碼失敗")
-            return
-        }
-        do {
-            try data.write(to: Self.stateURL, options: .atomic)
-        } catch {
-            NSLog("ShadowSpace: 狀態儲存失敗 %@", error.localizedDescription)
+        persistenceWriter.enqueue(snapshot())
+    }
+
+    /// 連續輸入時合併存檔，避免每個按鍵都在主執行緒編碼整份節點資料並原子寫檔。
+    /// App 結束時 cleanupOnTerminate 仍會同步補寫最後狀態。
+    private func scheduleSave() {
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self else { return }
+            self.save()
+            self.persistenceTask = nil
         }
     }
 
@@ -262,7 +371,7 @@ final class AppState: ObservableObject {
     /// 用 800ms 防抖＋世代計數合併連續切換（例如快速改多個設定），避免每次都重連一輪。
     /// TUN 模式重啟需要再次授權，改成提示使用者手動重連。
     func saveAndApply() {
-        save()
+        scheduleSave()
         guard connectionState != .disconnected else { return }
 #if !APP_STORE
         if settings.tunMode {
@@ -302,16 +411,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func makeLogLine(_ text: String) -> LogLine {
-        logSeq &+= 1
-        return LogLine(id: logSeq, text: text)
-    }
-
     private func appendLog(_ line: String) {
-        engineLog.append(makeLogLine(line))
-        if engineLog.count > 800 {
-            engineLog.removeFirst(engineLog.count - 800)
-        }
+        logs.append(line)
     }
 
     // MARK: - 連線生命週期
@@ -334,10 +435,24 @@ final class AppState: ObservableObject {
     private func handleNetworkChange(satisfied: Bool) {
         defer { lastNetSatisfied = satisfied }
 #if !APP_STORE
-        // 主要網路服務可能變了（例如 Wi-Fi↔乙太網路）：連線中且用系統代理時，
-        // 把代理重新套到新的主要服務上（enable 會先清舊的再設新的），代理才跟得上。
+        // 主要網路服務可能變了（例如 Wi-Fi↔乙太網路）：防抖後交給背景序列控制器。
+        // 控制器會比對已套用狀態；代理設定自己觸發的重複 NWPath 事件不會再執行 networksetup。
         if satisfied, connectionState == .connected, systemProxyActive, !settings.tunMode {
-            try? SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
+            proxyReapplyTask?.cancel()
+            proxyReapplyTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, let self,
+                      self.connectionState == .connected,
+                      self.systemProxyActive else { return }
+                do {
+                    _ = try await self.systemProxyController.enableIfNeeded(
+                        port: self.settings.mixedPort,
+                        bypassHosts: self.proxyServerHosts)
+                } catch {
+                    self.appendLog("[系統代理] 網路切換後重新套用失敗：\(error.localizedDescription)")
+                }
+                self.proxyReapplyTask = nil
+            }
         }
 #endif
         guard settings.autoConnect, satisfied, !lastNetSatisfied else { return }
@@ -365,7 +480,7 @@ final class AppState: ObservableObject {
                 await connectNative()
                 return
             }
-            engineLog = [makeLogLine("[原生引擎] 此節點需要原生尚未支援的功能，已自動改用 sing-box 引擎")]
+            logs.replace(with: ["[原生引擎] 此節點需要原生尚未支援的功能，已自動改用 sing-box 引擎"])
         }
 
         do {
@@ -381,24 +496,33 @@ final class AppState: ObservableObject {
                 engineInstallStatus = nil
             }
 
-            let result = SingBoxConfigBuilder.build(
+            let work = SingBoxBuildWork(
                 nodes: nodes, selectedID: selectedNodeID,
                 settings: settings, mode: mode, groups: groups, rules: rules)
-            tagByNodeID = result.tagByNodeID
-            tagByGroupID = result.tagByGroupID
+            let prepared = try await Task.detached(priority: .userInitiated) {
+                let result = SingBoxConfigBuilder.build(
+                    nodes: work.nodes, selectedID: work.selectedID,
+                    settings: work.settings, mode: work.mode,
+                    groups: work.groups, rules: work.rules)
+                return PreparedSingBoxConfig(
+                    data: try SingBoxConfigBuilder.jsonData(result.json),
+                    tagByNodeID: result.tagByNodeID,
+                    tagByGroupID: result.tagByGroupID)
+            }.value
+            tagByNodeID = prepared.tagByNodeID
+            tagByGroupID = prepared.tagByGroupID
 
-            engineLog.removeAll()
-            let configData = try SingBoxConfigBuilder.jsonData(result.json)
+            logs.clear()
             try Task.checkCancellation()   // 啟動引擎前（含引擎已安裝的常見路徑）給取消一個機會
             if settings.tunMode {
-                try engine.startPrivileged(configData: configData)
+                try engine.startPrivileged(configData: prepared.data)
             } else {
-                try engine.start(configData: configData)
+                try engine.start(configData: prepared.data)
             }
 
             guard await api.waitReady() else {
                 engine.stop()
-                let tail = engineLog.suffix(5).map(\.text).joined(separator: "\n")
+                let tail = logs.tailText(limit: 5)
                 throw EngineManager.EngineError.startFailed(
                     tail.isEmpty ? "API 無回應，可能是連接埠被占用" : tail)
             }
@@ -407,8 +531,10 @@ final class AppState: ObservableObject {
 
             // TUN 模式由引擎接管路由，不需要動系統代理
             if !settings.tunMode && settings.autoSystemProxy {
-                try SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
+                try await systemProxyController.enableIfNeeded(
+                    port: settings.mixedPort, bypassHosts: proxyServerHosts)
                 systemProxyActive = true
+                try Task.checkCancellation()
             }
 
             traffic.resetSession()
@@ -418,7 +544,7 @@ final class AppState: ObservableObject {
         } catch {
             engine.stop()
             if systemProxyActive {
-                SystemProxyManager.disable()
+                await systemProxyController.disable()
                 systemProxyActive = false
             }
             connectionState = .disconnected
@@ -449,7 +575,7 @@ final class AppState: ObservableObject {
             try await TunnelManager.start(payload: payload)
 
             traffic.resetSession()
-            engineLog = [makeLogLine("[App Store] 透明代理已啟動，出站「\(node.name)」（\(node.proto.displayName)）")]
+            logs.replace(with: ["[App Store] 透明代理已啟動，出站「\(node.name)」（\(node.proto.displayName)）"])
             connectionState = .connected
             save()
         } catch {
@@ -484,18 +610,23 @@ final class AppState: ObservableObject {
             try Task.checkCancellation()   // 引擎起來後、動系統代理前給取消一個機會（catch 會停掉引擎）
 
             if settings.autoSystemProxy {
-                try SystemProxyManager.enable(port: settings.mixedPort, bypassHosts: proxyServerHosts)
+                try await systemProxyController.enableIfNeeded(
+                    port: settings.mixedPort, bypassHosts: proxyServerHosts)
                 systemProxyActive = true
+                try Task.checkCancellation()
             }
             nativeLastUp = 0; nativeLastDown = 0
             traffic.resetSession()
-            engineLog = [makeLogLine("[原生引擎] 啟動於 127.0.0.1:\(settings.mixedPort)，出站「\(node.name)」（\(node.proto.displayName)）")]
+            logs.replace(with: ["[原生引擎] 啟動於 127.0.0.1:\(settings.mixedPort)，出站「\(node.name)」（\(node.proto.displayName)）"])
             startNativeTrafficPolling()
             connectionState = .connected
             save()
         } catch {
             nativeEngine?.stop(); nativeEngine = nil
-            if systemProxyActive { SystemProxyManager.disable(); systemProxyActive = false }
+            if systemProxyActive {
+                await systemProxyController.disable()
+                systemProxyActive = false
+            }
             connectionState = .disconnected
             if error is CancellationError {
                 toastMessage = "已取消連線"
@@ -521,9 +652,9 @@ final class AppState: ObservableObject {
     private func pollNativeTraffic() {
         guard let eng = nativeEngine else { return }
         let up = eng.upTotal, down = eng.downTotal
-        traffic.push(up: max(0, up - nativeLastUp), down: max(0, down - nativeLastDown))
+        traffic.push(up: max(0, up - nativeLastUp), down: max(0, down - nativeLastDown),
+                     totalUp: up, totalDown: down)
         nativeLastUp = up; nativeLastDown = down
-        traffic.sessionUpTotal = up; traffic.sessionDownTotal = down
     }
 #endif
 
@@ -537,27 +668,29 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
         }
 #endif
-        teardownAfterStop()
+        await teardownAfterStop()
     }
 
 #if !APP_STORE
     /// 引擎意外停止：Kill switch 開啟時保留系統代理（指向已停的埠）以阻擋流量外洩。
-    private func handleUnexpectedExit(status: Int32) {
+    private func handleUnexpectedExit(status: Int32) async {
         // 必須在 teardown 之前擷取——teardown 會把 systemProxyActive 清成 false。
         let keepProxy = settings.killSwitch && systemProxyActive
-        teardownAfterStop(keepSystemProxy: keepProxy)
+        await teardownAfterStop(keepSystemProxy: keepProxy)
         errorMessage = keepProxy
             ? "引擎意外停止（代碼 \(status)）。Kill switch 已啟用：系統代理保持開啟以阻擋流量外洩。請重新連線恢復上網，或結束 App 還原網路設定。"
             : "引擎意外停止（代碼 \(status)）。可到「日誌」分頁查看原因。"
     }
 #endif
 
-    private func teardownAfterStop(keepSystemProxy: Bool = false) {
+    private func teardownAfterStop(keepSystemProxy: Bool = false) async {
         trafficTask?.cancel()
         trafficTask = nil
 #if !APP_STORE
+        proxyReapplyTask?.cancel()
+        proxyReapplyTask = nil
         if systemProxyActive && !keepSystemProxy {
-            SystemProxyManager.disable()
+            await systemProxyController.disable()
             systemProxyActive = false
         }
         engine.stop()
@@ -565,20 +698,24 @@ final class AppState: ObservableObject {
         nativeEngine = nil
 #endif
         traffic.clearLive()
-        connections = []
+        connectionStats.clear()
         connectionState = .disconnected
     }
 
     /// App 結束前的同步清理：還原系統代理、停掉引擎、確保狀態落盤。
     func cleanupOnTerminate() {
 #if !APP_STORE
+        proxyReapplyTask?.cancel()
+        proxyReapplyTask = nil
         if systemProxyActive {
-            SystemProxyManager.disable()
+            systemProxyController.disableSynchronously()
         }
         engine.stop()
         nativeEngine?.stop()
 #endif
-        save()
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        persistenceWriter.flush(snapshot())
     }
 
 #if !APP_STORE
@@ -594,8 +731,6 @@ final class AppState: ObservableObject {
                         await MainActor.run {
                             guard let self else { return }
                             self.traffic.push(up: sample.up, down: sample.down)
-                            self.traffic.sessionUpTotal += sample.up
-                            self.traffic.sessionDownTotal += sample.down
                         }
                     }
                 }
@@ -678,10 +813,13 @@ final class AppState: ObservableObject {
 
     /// 從剪貼簿圖片掃 QR Code 匯入（截圖 QR 後直接匯入）。
     func importQRFromClipboard() async {
-        guard let payloads = ImportService.qrPayloadsFromClipboard() else {
+        guard let imageData = ImportService.qrImageDataFromClipboard() else {
             toastMessage = "剪貼簿沒有圖片。先截圖 QR Code（⌃⌘⇧4）再試。"
             return
         }
+        let payloads = await Task.detached(priority: .userInitiated) {
+            ImportService.qrPayloads(imageData: imageData)
+        }.value
         guard !payloads.isEmpty else {
             toastMessage = "圖片中找不到 QR Code"
             return
@@ -693,12 +831,21 @@ final class AppState: ObservableObject {
     /// reportFailure 為真時（預設）失敗會跳全域 errorMessage；貼上 sheet 想就地顯示錯誤時傳 false。
     @discardableResult
     func importText(_ text: String, reportFailure: Bool = true) async -> String? {
-        let (parsed, subURLs, unparsed) = URIParser.classify(text)
-        var added = 0
-        for node in parsed where !isDuplicate(node) {
-            nodes.append(node)
-            added += 1
+        // 大型 base64 / YAML 分享內容的拆解與 JSON 解碼不應佔用 MainActor。
+        let (parsed, subURLs, unparsed) = await Task.detached(priority: .userInitiated) {
+            URIParser.classify(text)
+        }.value
+        var known = Set(nodes.map(NodeDedupKey.init))
+        var addedNodes: [ProxyNode] = []
+        addedNodes.reserveCapacity(parsed.count)
+        for node in parsed where known.insert(NodeDedupKey(node)).inserted {
+            addedNodes.append(node)
         }
+        if !addedNodes.isEmpty {
+            // 一次發布，避免數千個節點逐筆讓 SwiftUI 重繪。
+            nodes.append(contentsOf: addedNodes)
+        }
+        let added = addedNodes.count
         var subAdded = 0
         var subErrors: [String] = []
         for urlString in subURLs {
@@ -729,13 +876,6 @@ final class AppState: ObservableObject {
         if !unparsed.isEmpty { summary += "；另有 \(unparsed.count) 行無法辨識" }
         toastMessage = summary
         return nil
-    }
-
-    private func isDuplicate(_ node: ProxyNode) -> Bool {
-        nodes.contains {
-            $0.server == node.server && $0.port == node.port &&
-            $0.proto == node.proto && $0.name == node.name
-        }
     }
 
     /// 手動新增或編輯節點
@@ -772,9 +912,13 @@ final class AppState: ObservableObject {
         sub.lastUpdated = Date()
         sub.rawUserInfo = result.userInfo
         subscriptions.append(sub)
-        for var node in result.nodes {
+        let incoming = result.nodes.map { node -> ProxyNode in
+            var node = node
             node.subscriptionID = sub.id
-            nodes.append(node)
+            return node
+        }
+        if !incoming.isEmpty {
+            nodes.append(contentsOf: incoming)
         }
         if selectedNodeID == nil { selectedNodeID = nodes.first?.id }
         save()
@@ -785,11 +929,13 @@ final class AppState: ObservableObject {
         do {
             let result = try await SubscriptionManager.fetch(urlString: subscriptions[index].url, userAgent: settings.subscriptionUA)
             let oldSelectedName = selectedNode?.name
-            nodes.removeAll { $0.subscriptionID == id }
-            for var node in result.nodes {
+            let incoming = result.nodes.map { node -> ProxyNode in
+                var node = node
                 node.subscriptionID = id
-                nodes.append(node)
+                return node
             }
+            // 替換整個陣列只發布一次，避免更新大型訂閱時清除一次再逐節點重繪。
+            nodes = nodes.filter { $0.subscriptionID != id } + incoming
             subscriptions[index].lastUpdated = Date()
             subscriptions[index].rawUserInfo = result.userInfo
             // 盡量保住原本選的節點（依名稱比對）
@@ -900,43 +1046,42 @@ final class AppState: ObservableObject {
 
 #if APP_STORE
         let targets = nodes.map { (id: $0.id, host: $0.server, port: $0.port) }
-        await TCPPing.pingAll(targets) { [weak self] id, ms in
-            guard let self else { return }
-            await MainActor.run {
-                self.latencies[id] = ms ?? -1
-            }
-        }
+        let results = await TCPPing.pingAll(targets, maxConcurrent: settings.latencyTestConcurrency)
+        latencies.merge(results) { _, new in new }
 #else
-        if connectionState == .connected {
+        if connectionState == .connected, nativeEngine == nil {
             let client = api
+            let testURL = settings.effectiveLatencyTestURL
+            let maxConcurrent = min(64, max(1, settings.latencyTestConcurrency))
             let targets = nodes.compactMap { node in
                 tagByNodeID[node.id].map { (id: node.id, tag: $0) }
             }
+            var results: [UUID: Int] = [:]
+            results.reserveCapacity(targets.count)
             await withTaskGroup(of: (UUID, Int?).self) { group in
                 var iterator = targets.makeIterator()
                 var active = 0
                 func addNext(_ group: inout TaskGroup<(UUID, Int?)>) {
                     guard let t = iterator.next() else { return }
                     active += 1
-                    group.addTask { (t.id, await client.urlDelay(tag: t.tag)) }
+                    group.addTask {
+                        (t.id, await client.urlDelay(tag: t.tag, url: testURL))
+                    }
                 }
-                for _ in 0..<8 { addNext(&group) }
+                for _ in 0..<maxConcurrent { addNext(&group) }
                 while active > 0 {
                     if let (id, ms) = await group.next() {
-                        latencies[id] = ms ?? -1
+                        results[id] = ms ?? -1
                     }
                     active -= 1
                     addNext(&group)
                 }
             }
+            latencies.merge(results) { _, new in new }
         } else {
             let targets = nodes.map { (id: $0.id, host: $0.server, port: $0.port) }
-            await TCPPing.pingAll(targets) { [weak self] id, ms in
-                guard let self else { return }
-                await MainActor.run {
-                    self.latencies[id] = ms ?? -1
-                }
-            }
+            let results = await TCPPing.pingAll(targets, maxConcurrent: settings.latencyTestConcurrency)
+            latencies.merge(results) { _, new in new }
         }
 #endif
         toastMessage = "延遲測試完成（\(nodes.count) 個節點）"
@@ -949,8 +1094,8 @@ final class AppState: ObservableObject {
 #if APP_STORE
         latencies[id] = await TCPPing.ping(host: node.server, port: node.port) ?? -1
 #else
-        if connectionState == .connected, let tag = tagByNodeID[id] {
-            latencies[id] = await api.urlDelay(tag: tag) ?? -1
+        if connectionState == .connected, nativeEngine == nil, let tag = tagByNodeID[id] {
+            latencies[id] = await api.urlDelay(tag: tag, url: settings.effectiveLatencyTestURL) ?? -1
         } else {
             latencies[id] = await TCPPing.ping(host: node.server, port: node.port) ?? -1
         }
@@ -961,9 +1106,7 @@ final class AppState: ObservableObject {
 
     func startConnectionsPolling() {
 #if APP_STORE
-        connections = []
-        connUploadTotal = 0
-        connDownloadTotal = 0
+        connectionStats.clear()
 #else
         guard connectionsTask == nil else { return }
         connectionsTask = Task { [weak self] in
@@ -971,11 +1114,11 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 if self.connectionState == .connected,
                    let snapshot = await self.api.connections() {
-                    self.connections = snapshot.items
-                    self.connUploadTotal = snapshot.uploadTotal
-                    self.connDownloadTotal = snapshot.downloadTotal
-                } else if !self.connections.isEmpty {
-                    self.connections = []
+                    self.connectionStats.update(items: snapshot.items,
+                                                uploadTotal: snapshot.uploadTotal,
+                                                downloadTotal: snapshot.downloadTotal)
+                } else if !self.connectionStats.items.isEmpty {
+                    self.connectionStats.clear()
                 }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }

@@ -63,14 +63,18 @@ final class EngineManager {
 
     private var process: Process?
     private(set) var runMode: RunMode = .none
-    /// 引擎輸出的每一行 log（從背景執行緒呼叫）
-    var onLog: ((String) -> Void)?
+    /// 引擎輸出的 log 批次（從背景執行緒呼叫）。同一個 pipe/file chunk 合併通知，
+    /// 避免高流量時為每一行建立 MainActor Task。
+    var onLog: (([String]) -> Void)?
     /// 引擎意外退出時呼叫（從背景執行緒呼叫）
     var onUnexpectedExit: ((Int32) -> Void)?
     private var expectingExit = false
     private var watchTimer: DispatchSourceTimer?
     private var logTailTimer: DispatchSourceTimer?
     private var logTailOffset: UInt64 = 0
+    private let logDeliveryQueue = DispatchQueue(label: "shadowspace.engine.log-delivery")
+    private var pendingLogs: [String] = []
+    private var logFlushScheduled = false
 
     var isRunning: Bool {
         switch runMode {
@@ -133,13 +137,15 @@ final class EngineManager {
             let data = handle.availableData
             guard !data.isEmpty else { return }
             buffer.append(data)
+            var lines: [String] = []
             while let nl = buffer.firstIndex(of: 0x0A) {
                 let lineData = buffer.prefix(upTo: nl)
                 buffer.removeSubrange(...nl)
                 if let line = String(data: lineData, encoding: .utf8), !line.isEmpty {
-                    self?.onLog?(line)
+                    lines.append(line)
                 }
             }
+            if !lines.isEmpty { self?.enqueueLogs(lines) }
         }
         expectingExit = false
         proc.terminationHandler = { [weak self] p in
@@ -251,7 +257,7 @@ final class EngineManager {
                 usleep(200_000)
             }
             if processAlive(pid) {
-                onLog?("[warn] 引擎仍在執行（PID \(pid)），請手動結束 sing-box")
+                enqueueLogs(["[warn] 引擎仍在執行（PID \(pid)），請手動結束 sing-box"])
             }
         }
         runMode = .none
@@ -290,9 +296,10 @@ final class EngineManager {
             guard let data = try? handle.readToEnd(), !data.isEmpty else { return }
             self.logTailOffset += UInt64(data.count)
             guard let text = String(data: data, encoding: .utf8) else { return }
-            for line in text.split(whereSeparator: \.isNewline) where !line.isEmpty {
-                self.onLog?(String(line))
-            }
+            let lines = text.split(whereSeparator: \.isNewline)
+                .filter { !$0.isEmpty }
+                .map(String.init)
+            if !lines.isEmpty { self.enqueueLogs(lines) }
         }
         timer.resume()
         logTailTimer = timer
@@ -301,6 +308,25 @@ final class EngineManager {
     private func stopLogTail() {
         logTailTimer?.cancel()
         logTailTimer = nil
+    }
+
+    /// 最多每 100ms 將日誌交給 UI 一次。sing-box 在高流量下可能逐行喚醒 pipe；
+    /// 若每行都建立 MainActor Task，主執行緒會被日誌更新淹沒。
+    private func enqueueLogs(_ lines: [String]) {
+        guard !lines.isEmpty else { return }
+        logDeliveryQueue.async { [weak self] in
+            guard let self else { return }
+            self.pendingLogs.append(contentsOf: lines)
+            guard !self.logFlushScheduled else { return }
+            self.logFlushScheduled = true
+            self.logDeliveryQueue.asyncAfter(deadline: .now() + .milliseconds(100)) { [weak self] in
+                guard let self else { return }
+                let batch = self.pendingLogs
+                self.pendingLogs.removeAll(keepingCapacity: true)
+                self.logFlushScheduled = false
+                if !batch.isEmpty { self.onLog?(batch) }
+            }
+        }
     }
 
     /// root 端腳本：啟動引擎、寫 PID，看門狗盯著哨兵檔與 App 本體，

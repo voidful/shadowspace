@@ -13,6 +13,8 @@ struct SettingsView: View {
         ("Cloudflare (1.1.1.1)", "1.1.1.1"),
         ("Google DoH", "https://dns.google/dns-query"),
         ("Cloudflare DoH", "https://cloudflare-dns.com/dns-query"),
+        ("Google DoH3", "h3://dns.google/dns-query"),
+        ("Cloudflare DoH3", "h3://cloudflare-dns.com/dns-query"),
     ]
     private let localDNSPresets: [(String, String)] = [
         ("AliDNS (223.5.5.5)", "223.5.5.5"),
@@ -26,6 +28,8 @@ struct SettingsView: View {
             engineSection
             generalSection
             dnsSection
+            privateNetworkSection
+            speedTestSection
             networkSection
             subscriptionSection
             coreSection
@@ -148,7 +152,94 @@ struct SettingsView: View {
         } header: {
             Text("DNS")
         } footer: {
-            Text("自訂值支援 IP、https://（DoH）與 tls://（DoT）。遠端 DNS 透過代理解析，避免 DNS 污染。")
+            Text("自訂值支援 IP、https://（DoH）、h3://（DoH3）與 tls://（DoT）。遠端 DNS 透過代理解析，避免 DNS 污染。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - 私有組網
+
+    @ViewBuilder
+    private var privateNetworkSection: some View {
+#if !APP_STORE
+        if state.settings.engineKind == .singbox {
+            Section {
+                Toggle(isOn: state.appliedSetting(\.tailscaleEnabled)) {
+                    CaptionedLabel("啟用 Tailscale 私有組網",
+                                   "直接在核心加入此 Mac 到 tailnet；可安全存取家中電腦、NAS 與私有服務。")
+                }
+                if state.settings.tailscaleEnabled {
+                    Toggle("使用 MagicDNS", isOn: state.appliedSetting(\.tailscaleMagicDNS))
+                    Toggle("接受其他裝置公告的子網路路由",
+                           isOn: state.appliedSetting(\.tailscaleAcceptRoutes))
+                    LabeledContent("裝置名稱") {
+                        TextField("ShadowSpace", text: state.setting(\.tailscaleHostname))
+                            .frame(maxWidth: 220)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    LabeledContent("驗證金鑰（可空）") {
+                        SecureField("登入網址會顯示在日誌", text: state.setting(\.tailscaleAuthKey))
+                            .frame(maxWidth: 220)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    LabeledContent("控制伺服器（可空）") {
+                        TextField("https://controlplane.tailscale.com",
+                                  text: state.setting(\.tailscaleControlURL))
+                            .frame(maxWidth: 260)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    LabeledContent("Exit Node（可空）") {
+                        TextField("裝置名稱或 Tailscale IP", text: state.setting(\.tailscaleExitNode))
+                            .frame(maxWidth: 220)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    if !state.settings.tailscaleExitNode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Toggle("使用 Exit Node 時仍可存取區域網路",
+                               isOn: state.appliedSetting(\.tailscaleExitNodeAllowLAN))
+                    }
+                    TailscaleLoginLink()
+                }
+            } header: {
+                Text("私有組網")
+            } footer: {
+                Text("需要 sing-box 1.12 以上。驗證金鑰留空時，連線後請到「日誌」開啟 Tailscale 登入網址；登入狀態會保存在 ShadowSpace 設定資料夾。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+#endif
+    }
+
+    // MARK: - 延遲測試
+
+    private var speedTestSection: some View {
+        Section {
+            LabeledContent("測試網址") {
+                TextField("https://www.gstatic.com/generate_204",
+                          text: state.setting(\.latencyTestURL))
+                    .frame(maxWidth: 280)
+                    .multilineTextAlignment(.trailing)
+            }
+            Picker("自動群組重測間隔", selection: state.appliedSetting(\.latencyTestIntervalMinutes)) {
+                Text("每 1 分鐘").tag(1)
+                Text("每 3 分鐘").tag(3)
+                Text("每 5 分鐘").tag(5)
+                Text("每 10 分鐘").tag(10)
+                Text("每 30 分鐘").tag(30)
+            }
+            LabeledContent("切換容差") {
+                TextField("", value: state.appliedSetting(\.latencyTestToleranceMS),
+                          format: .number.grouping(.never))
+                    .frame(width: 70)
+                    .multilineTextAlignment(.trailing)
+                Text("ms").foregroundStyle(.secondary)
+            }
+            Stepper(value: state.setting(\.latencyTestConcurrency), in: 1...64) {
+                LabeledContent("批次測速並行數", value: String(state.settings.latencyTestConcurrency))
+            }
+        } header: {
+            Text("測速")
+        } footer: {
+            Text("自動最快群組使用 HTTPS 真實請求與切換容差，避免大量節點因幾毫秒抖動頻繁換線；手動批次測速最多可並行 64 個節點。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -342,6 +433,19 @@ struct SettingsView: View {
     }
 }
 
+/// 只有這個小元件訂閱高頻日誌，避免設定表單因核心輸出而整頁重算。
+private struct TailscaleLoginLink: View {
+    @EnvironmentObject private var logs: EngineLogStore
+
+    var body: some View {
+        if let loginURL = AppState.tailscaleLoginURL(in: logs.lines.map(\.text)) {
+            Link(destination: loginURL) {
+                Label("開啟 Tailscale 登入", systemImage: "person.badge.key")
+            }
+        }
+    }
+}
+
 // MARK: - 設定檢視 Sheet
 
 struct ConfigViewerSheet: View {
@@ -403,7 +507,7 @@ private struct DNSPickerRow: View {
                 Text("自訂…").tag("__custom__")
             }
             if customMode || !matchesPreset {
-                TextField("", text: $value, prompt: Text("例如 9.9.9.9 或 https://dns.example.com/dns-query"))
+                TextField("", text: $value, prompt: Text("例如 9.9.9.9 或 h3://dns.example.com/dns-query"))
                     .textFieldStyle(.roundedBorder)
             }
         }
