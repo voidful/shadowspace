@@ -3,11 +3,12 @@ import AppKit
 
 struct LogsView: View {
     @EnvironmentObject private var state: AppState
+    @EnvironmentObject private var logs: EngineLogStore
     @State private var autoScroll = true
 
     var body: some View {
         Group {
-            if state.engineLog.isEmpty {
+            if logs.lines.isEmpty {
                 ContentUnavailableView {
                     Label("尚無日誌", systemImage: "doc.text")
                 } description: {
@@ -17,7 +18,7 @@ struct LogsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(state.engineLog) { line in
+                            ForEach(logs.lines) { line in
                                 Text(line.text)
                                     .font(.caption.monospaced())
                                     .textSelection(.enabled)
@@ -28,7 +29,7 @@ struct LogsView: View {
                         .padding(12)
                     }
                     // 追蹤最後一行的 id 而非 count——環形緩衝裁剪後 count 恆為 800、永不觸發。
-                    .onChange(of: state.engineLog.last?.id) { _, id in
+                    .onChange(of: logs.lines.last?.id) { _, id in
                         if autoScroll, let id {
                             proxy.scrollTo(id, anchor: .bottom)
                         }
@@ -44,18 +45,18 @@ struct LogsView: View {
                 }
                 .help("自動捲動到最新日誌")
                 Button {
-                    NSPasteboard.copyString(state.engineLog.map(\.text).joined(separator: "\n"))
+                    NSPasteboard.copyString(logs.lines.map(\.text).joined(separator: "\n"))
                     state.toastMessage = "日誌已複製"
                 } label: {
                     Label("複製全部", systemImage: "doc.on.doc")
                 }
-                .disabled(state.engineLog.isEmpty)
+                .disabled(logs.lines.isEmpty)
                 Button {
-                    state.engineLog.removeAll()
+                    logs.clear()
                 } label: {
                     Label("清除", systemImage: "trash")
                 }
-                .disabled(state.engineLog.isEmpty)
+                .disabled(logs.lines.isEmpty)
             }
         }
     }

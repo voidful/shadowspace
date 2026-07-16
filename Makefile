@@ -7,7 +7,8 @@ RELEASE_BIN := .build/release/$(APP_NAME)
 #   make release SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)"
 SIGN_IDENTITY ?= -
 NOTARY_PROFILE ?= ShadowSpaceNotary
-VERSION = $(shell /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+VERSION = $(shell tr -d '[:space:]' < VERSION)
+BUILD_NUMBER = $(shell tr -d '[:space:]' < BUILD_NUMBER)
 
 .PHONY: all setup build app sign run dev test engine dmg notarize release appstore-project appstore-preflight clean
 
@@ -31,6 +32,8 @@ app: build
 	mkdir -p $(APP_BUNDLE)/Contents/MacOS $(APP_BUNDLE)/Contents/Resources
 	cp $(RELEASE_BIN) $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	cp Resources/Info.plist $(APP_BUNDLE)/Contents/Info.plist
+	@/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_BUNDLE)/Contents/Info.plist
+	@/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_NUMBER)" $(APP_BUNDLE)/Contents/Info.plist
 	@if [ -f Resources/AppIcon.icns ]; then \
 		cp Resources/AppIcon.icns $(APP_BUNDLE)/Contents/Resources/AppIcon.icns; \
 		echo "已套用 App 圖示"; \

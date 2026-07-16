@@ -3,16 +3,17 @@ import SwiftUI
 /// 活躍連線檢視：看每條連線的目標、命中規則、出口節點與流量，可強制關閉。
 struct ConnectionsView: View {
     @EnvironmentObject private var state: AppState
+    @EnvironmentObject private var stats: ConnectionStatsStore
     @State private var filter = ""
     @State private var sortOrder = [KeyPathComparator(\ConnectionInfo.download, order: .reverse)]
 
     private var filtered: [ConnectionInfo] {
         let base: [ConnectionInfo]
         if filter.isEmpty {
-            base = state.connections
+            base = stats.items
         } else {
             let key = filter.lowercased()
-            base = state.connections.filter {
+            base = stats.items.filter {
                 $0.target.lowercased().contains(key) ||
                 $0.rule.lowercased().contains(key) ||
                 $0.chain.lowercased().contains(key)
@@ -45,7 +46,7 @@ struct ConnectionsView: View {
                 } label: {
                     Label("全部關閉", systemImage: "xmark.circle")
                 }
-                .disabled(state.connections.isEmpty)
+                .disabled(stats.items.isEmpty)
                 .help("關閉所有活躍連線")
             }
         }
@@ -102,7 +103,7 @@ struct ConnectionsView: View {
         HStack {
             Text("共 \(filtered.count) 條連線")
             Spacer()
-            Text("總計  ↑ \(state.connUploadTotal.byteString)   ↓ \(state.connDownloadTotal.byteString)")
+            Text("總計  ↑ \(stats.uploadTotal.byteString)   ↓ \(stats.downloadTotal.byteString)")
                 .monospacedDigit()
         }
         .font(.caption)

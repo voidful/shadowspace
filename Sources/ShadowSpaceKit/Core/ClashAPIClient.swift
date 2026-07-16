@@ -52,9 +52,16 @@ struct ClashAPIClient {
     }
 
     /// 透過引擎做真實 URL 延遲測試（毫秒），失敗回傳 nil
-    func urlDelay(tag: String, timeoutMs: Int = 5000) async -> Int? {
-        let path = "/proxies/\(Self.encodeTag(tag))/delay"
-            + "?timeout=\(timeoutMs)&url=http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204"
+    func urlDelay(tag: String, url: String = "https://www.gstatic.com/generate_204",
+                  timeoutMs: Int = 5000) async -> Int? {
+        var components = URLComponents()
+        components.path = "/proxies/\(tag)/delay"
+        components.queryItems = [
+            URLQueryItem(name: "timeout", value: String(timeoutMs)),
+            URLQueryItem(name: "url", value: url),
+        ]
+        let path = components.string
+            ?? "/proxies/\(Self.encodeTag(tag))/delay?timeout=\(timeoutMs)"
         var req = request(path)
         req.timeoutInterval = Double(timeoutMs) / 1000 + 3
         guard let (data, resp) = try? await URLSession.shared.data(for: req),

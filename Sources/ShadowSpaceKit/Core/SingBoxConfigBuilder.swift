@@ -17,6 +17,7 @@ enum SingBoxConfigBuilder {
     static let selectorTag = "PROXY"
     static let autoTag = "AUTO"
     static let directTag = "DIRECT"
+    static let tailscaleTag = "TAILSCALE"
 
     private static let ruleSetBaseURL: [String: String] = [
         "geosite": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set",
@@ -31,7 +32,7 @@ enum SingBoxConfigBuilder {
                       rules userRules: [UserRule] = []) -> BuildResult {
 
         // --- 唯一化 outbound tag ---
-        var usedTags: Set<String> = [selectorTag, autoTag, directTag]
+        var usedTags: Set<String> = [selectorTag, autoTag, directTag, tailscaleTag]
         var tagByNodeID: [UUID: String] = [:]
         for node in nodes {
             tagByNodeID[node.id] = uniqueTag(node.name, fallback: "\(node.server):\(node.port)", used: &usedTags)
@@ -69,13 +70,8 @@ enum SingBoxConfigBuilder {
             "interrupt_exist_connections": true,
         ])
         if nodes.count > 1 {
-            outbounds.append([
-                "type": "urltest",
-                "tag": autoTag,
-                "outbounds": nodeTags,
-                "url": "http://www.gstatic.com/generate_204",
-                "interval": "5m",
-            ])
+            outbounds.append(urlTestOutbound(
+                tag: autoTag, members: nodeTags, settings: settings))
         }
         // 使用者自訂群組
         for group in validGroups {
@@ -92,13 +88,8 @@ enum SingBoxConfigBuilder {
                     "interrupt_exist_connections": true,
                 ])
             case .urltest:
-                outbounds.append([
-                    "type": "urltest",
-                    "tag": gtag,
-                    "outbounds": memberTags,
-                    "url": "http://www.gstatic.com/generate_204",
-                    "interval": "5m",
-                ])
+                outbounds.append(urlTestOutbound(
+                    tag: gtag, members: memberTags, settings: settings))
             }
         }
         var endpoints: [[String: Any]] = []
@@ -111,6 +102,9 @@ enum SingBoxConfigBuilder {
                                           defaultFingerprint: settings.tlsFingerprint))
             }
         }
+        if settings.tailscaleEnabled {
+            endpoints.append(tailscaleEndpoint(settings: settings))
+        }
         outbounds.append(["type": "direct", "tag": directTag])
 
         // --- 路由規則 ---
@@ -119,6 +113,15 @@ enum SingBoxConfigBuilder {
         var routeRules: [[String: Any]] = [["action": "sniff"]]
         if settings.tunMode {
             routeRules.append(["protocol": "dns", "action": "hijack-dns"])
+        }
+        // Tailscale endpoint 會回報 MagicDNS 網域、peer 與已接受 subnet/exit-node 的 preferred routes。
+        // 必須放在私有 IP 直連之前，否則 tailnet / subnet route 可能先被 DIRECT 吃掉。
+        if settings.tailscaleEnabled {
+            routeRules.append([
+                "preferred_by": [tailscaleTag],
+                "action": "route",
+                "outbound": tailscaleTag,
+            ])
         }
         routeRules.append(["ip_is_private": true, "outbound": directTag])
 
@@ -192,21 +195,43 @@ enum SingBoxConfigBuilder {
         }
 
         // --- DNS ---
-        var dnsRules: [[String: Any]] = [
+        var dnsRules: [[String: Any]] = []
+        if settings.tailscaleEnabled && settings.tailscaleMagicDNS {
+            // sing-box 1.12–1.13 相容寫法：先問 MagicDNS，有答案才採用；一般網域會繼續走後續規則。
+            dnsRules.append([
+                "ip_accept_any": true,
+                "action": "route",
+                "server": "dns-tailscale",
+            ])
+        }
+        dnsRules.append(contentsOf: [
             ["clash_mode": "Direct", "server": "dns-direct"],
             ["clash_mode": "Global", "server": "dns-remote"],
-        ]
+        ])
         if settings.adBlock {
             dnsRules.append(["rule_set": "geosite-category-ads-all", "action": "reject"])
         }
         if settings.chinaDirect {
             dnsRules.append(["rule_set": "geosite-cn", "server": "dns-direct"])
         }
+        var dnsServers: [[String: Any]] = [
+            // 加密 DNS 使用網域時先靠系統 resolver 找到 DNS 主機，避免 dns-direct 自我解析循環。
+            ["type": "local", "tag": "dns-bootstrap"],
+            dnsServerDict(tag: "dns-direct", spec: settings.localDNS, detour: nil,
+                          domainResolver: "dns-bootstrap"),
+            dnsServerDict(tag: "dns-remote", spec: settings.remoteDNS, detour: selectorTag,
+                          domainResolver: "dns-bootstrap"),
+        ]
+        if settings.tailscaleEnabled && settings.tailscaleMagicDNS {
+            dnsServers.append([
+                "type": "tailscale",
+                "tag": "dns-tailscale",
+                "endpoint": tailscaleTag,
+                "accept_default_resolvers": false,
+            ])
+        }
         let dns: [String: Any] = [
-            "servers": [
-                dnsServerDict(tag: "dns-direct", spec: settings.localDNS, detour: nil),
-                dnsServerDict(tag: "dns-remote", spec: settings.remoteDNS, detour: selectorTag),
-            ],
+            "servers": dnsServers,
             "rules": dnsRules,
             "final": "dns-remote",
             "strategy": "prefer_ipv4",
@@ -304,16 +329,17 @@ enum SingBoxConfigBuilder {
 
     // MARK: - DNS server 規格
 
-    /// spec 支援："local"（系統解析）、IP（UDP）、https://（DoH）、tls://（DoT）
-    static func dnsServerDict(tag: String, spec: String, detour: String?) -> [String: Any] {
+    /// spec 支援："local"（系統解析）、IP（UDP）、https://（DoH）、h3://（DoH3）、tls://（DoT）
+    static func dnsServerDict(tag: String, spec: String, detour: String?,
+                              domainResolver: String? = nil) -> [String: Any] {
         var d: [String: Any] = ["tag": tag]
         let s = spec.trimmingCharacters(in: .whitespacesAndNewlines)
         if s == "local" || s.isEmpty {
             d["type"] = "local"
             return d
         }
-        if s.hasPrefix("https://"), let url = URL(string: s) {
-            d["type"] = "https"
+        if (s.hasPrefix("https://") || s.hasPrefix("h3://")), let url = URL(string: s) {
+            d["type"] = s.hasPrefix("h3://") ? "h3" : "https"
             d["server"] = url.host ?? s
             if !url.path.isEmpty, url.path != "/dns-query" {
                 d["path"] = url.path
@@ -326,7 +352,47 @@ enum SingBoxConfigBuilder {
             d["server"] = s
         }
         if let detour { d["detour"] = detour }
+        if let domainResolver, d["server"] != nil,
+           d["type"] as? String != "udp" {
+            d["domain_resolver"] = domainResolver
+        }
         return d
+    }
+
+    // MARK: - Tailscale / URLTest
+
+    static func tailscaleEndpoint(settings: AppSettings) -> [String: Any] {
+        var endpoint: [String: Any] = [
+            "type": "tailscale",
+            "tag": tailscaleTag,
+            "state_directory": "tailscale",
+            "accept_routes": settings.tailscaleAcceptRoutes,
+        ]
+        let authKey = settings.tailscaleAuthKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let controlURL = settings.tailscaleControlURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hostname = settings.tailscaleHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exitNode = settings.tailscaleExitNode.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !authKey.isEmpty { endpoint["auth_key"] = authKey }
+        if !controlURL.isEmpty { endpoint["control_url"] = controlURL }
+        if !hostname.isEmpty { endpoint["hostname"] = hostname }
+        if !exitNode.isEmpty {
+            endpoint["exit_node"] = exitNode
+            endpoint["exit_node_allow_lan_access"] = settings.tailscaleExitNodeAllowLAN
+        }
+        return endpoint
+    }
+
+    static func urlTestOutbound(tag: String, members: [String], settings: AppSettings) -> [String: Any] {
+        return [
+            "type": "urltest",
+            "tag": tag,
+            "outbounds": members,
+            "url": settings.effectiveLatencyTestURL,
+            "interval": "\(max(1, settings.latencyTestIntervalMinutes))m",
+            "tolerance": max(0, settings.latencyTestToleranceMS),
+            "idle_timeout": "30m",
+            "interrupt_exist_connections": false,
+        ]
     }
 
     // MARK: - 單一節點 → outbound

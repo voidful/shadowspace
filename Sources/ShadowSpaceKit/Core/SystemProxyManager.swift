@@ -155,3 +155,91 @@ enum SystemProxyManager {
         clearLoopbackProxies()
     }
 }
+
+/// 系統代理的序列背景控制器。
+///
+/// `networksetup` 每次套用會啟動多個子程序，不能放在 MainActor；控制器也會記住
+/// 已套用的服務與設定，讓 NWPathMonitor 因代理變更再次回報時直接跳過，避免回授迴圈。
+final class SystemProxyController: @unchecked Sendable {
+    private struct AppliedConfiguration: Equatable {
+        let port: Int
+        let bypassHosts: [String]
+        let networkIdentity: String
+    }
+
+    typealias EnableOperation = @Sendable (_ port: Int, _ bypassHosts: [String]) throws -> Void
+    typealias DisableOperation = @Sendable () -> Void
+    typealias NetworkIdentity = @Sendable () -> String?
+
+    private let queue: DispatchQueue
+    private let enableOperation: EnableOperation
+    private let disableOperation: DisableOperation
+    private let networkIdentity: NetworkIdentity
+    private var appliedConfiguration: AppliedConfiguration?
+
+    init(
+        queueLabel: String = "shadowspace.system-proxy",
+        enableOperation: @escaping EnableOperation = { port, hosts in
+            try SystemProxyManager.enable(port: port, bypassHosts: hosts)
+        },
+        disableOperation: @escaping DisableOperation = {
+            SystemProxyManager.disable()
+        },
+        networkIdentity: @escaping NetworkIdentity = {
+            SystemProxyManager.primaryServiceName()
+        }
+    ) {
+        queue = DispatchQueue(label: queueLabel, qos: .userInitiated)
+        self.enableOperation = enableOperation
+        self.disableOperation = disableOperation
+        self.networkIdentity = networkIdentity
+    }
+
+    /// 套用代理；相同主要網路服務、埠與 bypass 清單已套用時不執行任何子程序。
+    /// 回傳 true 表示本次真的重新套用了系統代理。
+    @discardableResult
+    func enableIfNeeded(port: Int, bypassHosts: [String]) async throws -> Bool {
+        let normalizedHosts = Array(Set(bypassHosts.map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }.filter { !$0.isEmpty })).sorted()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                let configuration = AppliedConfiguration(
+                    port: port,
+                    bypassHosts: normalizedHosts,
+                    networkIdentity: networkIdentity() ?? "<fallback>")
+                guard appliedConfiguration != configuration else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                do {
+                    try enableOperation(port, normalizedHosts)
+                    appliedConfiguration = configuration
+                    continuation.resume(returning: true)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// 與 enable 共用同一序列，確保不會在斷線後又被較早排入的網路事件重新開啟。
+    func disable() async {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                disableOperation()
+                appliedConfiguration = nil
+                continuation.resume()
+            }
+        }
+    }
+
+    /// App 結束時必須等待代理確實還原；此時 UI 已在終止流程，允許同步等待序列收尾。
+    func disableSynchronously() {
+        queue.sync { [self] in
+            disableOperation()
+            appliedConfiguration = nil
+        }
+    }
+}

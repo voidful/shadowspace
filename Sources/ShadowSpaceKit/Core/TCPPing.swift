@@ -54,24 +54,29 @@ enum TCPPing {
 
     /// 並行測試多個節點，限制同時連線數
     static func pingAll(_ targets: [(id: UUID, host: String, port: Int)],
-                        onResult: @escaping @Sendable (UUID, Int?) async -> Void) async {
-        await withTaskGroup(of: Void.self) { group in
+                        maxConcurrent: Int = 16) async -> [UUID: Int] {
+        await withTaskGroup(of: (UUID, Int).self, returning: [UUID: Int].self) { group in
             var iterator = targets.makeIterator()
             var active = 0
-            func addNext(_ group: inout TaskGroup<Void>) {
+            var results: [UUID: Int] = [:]
+            results.reserveCapacity(targets.count)
+            func addNext(_ group: inout TaskGroup<(UUID, Int)>) {
                 guard let target = iterator.next() else { return }
                 active += 1
                 group.addTask {
                     let ms = await ping(host: target.host, port: target.port)
-                    await onResult(target.id, ms)
+                    return (target.id, ms ?? -1)
                 }
             }
-            for _ in 0..<16 { addNext(&group) }
+            for _ in 0..<min(64, max(1, maxConcurrent)) { addNext(&group) }
             while active > 0 {
-                await group.next()
+                if let (id, ms) = await group.next() {
+                    results[id] = ms
+                }
                 active -= 1
                 addNext(&group)
             }
+            return results
         }
     }
 }
