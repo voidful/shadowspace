@@ -5,6 +5,57 @@ import CoreImage
 /// 匯入來源的解析：shadowspace:// URL 分派與剪貼簿 QR Code 解碼。
 /// 與 AppState 分離以便單元測試 URL 分派邏輯，並把 CoreImage 依賴收攏在一處。
 enum ImportService {
+    private struct NodeDedupKey: Hashable {
+        let server: String
+        let port: Int
+        let proto: NodeProtocol
+        let name: String
+        let vision: Bool
+
+        init(_ node: ProxyNode, vision: Bool? = nil) {
+            server = node.server
+            port = node.port
+            proto = node.proto
+            name = node.name
+            self.vision = vision ?? (node.proto == .vless && node.flow == "xtls-rprx-vision")
+        }
+    }
+
+    /// 重新匯入同一個手動 VLESS 節點時，補上 Vision 並保留原有 ID 與中轉設定。
+    static func mergeNodes(_ incoming: [ProxyNode], into existing: [ProxyNode])
+        -> (nodes: [ProxyNode], added: Int, upgraded: [UUID]) {
+        var nodes = existing
+        var known = Set(existing.map { NodeDedupKey($0) })
+        let legacyIndices = Dictionary(grouping: existing.indices.filter {
+            let node = existing[$0]
+            return node.proto == .vless && node.subscriptionID == nil && (node.flow ?? "").isEmpty
+        }, by: { NodeDedupKey(existing[$0]) })
+        var upgraded: [UUID] = []
+
+        for node in incoming {
+            let key = NodeDedupKey(node)
+            guard known.insert(key).inserted else { continue }
+            if key.vision,
+               let candidates = legacyIndices[NodeDedupKey(node, vision: false)] {
+                let matches = candidates.filter { index in
+                    var old = existing[index]
+                    old.id = node.id
+                    old.flow = node.flow
+                    old.dialerNodeID = node.dialerNodeID
+                    return old == node
+                }
+                if matches.count == 1, let index = matches.first {
+                    nodes[index].flow = node.flow
+                    upgraded.append(nodes[index].id)
+                    continue
+                }
+            }
+            nodes.append(node)
+        }
+
+        return (nodes, nodes.count - existing.count, upgraded)
+    }
+
 
     /// shadowspace:// URL 的解析結果。
     enum URLImport: Equatable {

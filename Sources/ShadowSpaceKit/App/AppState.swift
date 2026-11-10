@@ -61,21 +61,6 @@ final class StatePersistenceWriter: @unchecked Sendable {
     }
 }
 
-/// 匯入去重只比對既有行為使用的四個欄位，但改用 Set 將大型清單從 O(n²) 降為 O(n)。
-private struct NodeDedupKey: Hashable {
-    let server: String
-    let port: Int
-    let proto: String
-    let name: String
-
-    init(_ node: ProxyNode) {
-        server = node.server
-        port = node.port
-        proto = node.proto.rawValue
-        name = node.name
-    }
-}
-
 #if !APP_STORE
 /// 把設定建構的輸入與輸出包成不可變工作單，讓大型節點清單可安全在背景產生 JSON。
 private struct SingBoxBuildWork: @unchecked Sendable {
@@ -835,17 +820,15 @@ final class AppState: ObservableObject {
         let (parsed, subURLs, unparsed) = await Task.detached(priority: .userInitiated) {
             URIParser.classify(text)
         }.value
-        var known = Set(nodes.map(NodeDedupKey.init))
-        var addedNodes: [ProxyNode] = []
-        addedNodes.reserveCapacity(parsed.count)
-        for node in parsed where known.insert(NodeDedupKey(node)).inserted {
-            addedNodes.append(node)
-        }
-        if !addedNodes.isEmpty {
+        let merged = ImportService.mergeNodes(parsed, into: nodes)
+        if merged.added > 0 || !merged.upgraded.isEmpty {
             // 一次發布，避免數千個節點逐筆讓 SwiftUI 重繪。
-            nodes.append(contentsOf: addedNodes)
+            nodes = merged.nodes
         }
-        let added = addedNodes.count
+        if !merged.upgraded.isEmpty {
+            let upgraded = Set(merged.upgraded)
+            latencies = latencies.filter { !upgraded.contains($0.key) }
+        }
         var subAdded = 0
         var subErrors: [String] = []
         for urlString in subURLs {
@@ -858,9 +841,11 @@ final class AppState: ObservableObject {
         }
         if selectedNodeID == nil { selectedNodeID = nodes.first?.id }
         save()
+        if !merged.upgraded.isEmpty, connectionState == .connected { saveAndApply() }
 
         var parts: [String] = []
-        if added > 0 { parts.append("匯入 \(added) 個節點") }
+        if merged.added > 0 { parts.append("匯入 \(merged.added) 個節點") }
+        if !merged.upgraded.isEmpty { parts.append("更新 \(merged.upgraded.count) 個 Vision 節點") }
         if subAdded > 0 { parts.append("新增 \(subAdded) 個訂閱") }
         if parts.isEmpty {
 #if APP_STORE

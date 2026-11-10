@@ -73,6 +73,49 @@ final class URIParserTests: XCTestCase {
         XCTAssertEqual(node?.name, "HK Reality")
     }
 
+    func testVLESSShadowrocketBase64Reality() {
+        let uuid = "9a4b2c33-1111-2222-3333-444455556666"
+        let authority = Data("auto:\(uuid)@edge.example.com:443".utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "=", with: "")
+        let uri = "vless://\(authority)?remarks=Edge%20Reality&tls=1&peer=www.yahoo.com&udp=1&xtls=2&pbk=PUBKEY123&sid=ab12"
+        let node = URIParser.parse(uri)
+
+        XCTAssertEqual(node?.proto, .vless)
+        XCTAssertEqual(node?.uuid, uuid)
+        XCTAssertEqual(node?.server, "edge.example.com")
+        XCTAssertEqual(node?.port, 443)
+        XCTAssertEqual(node?.name, "Edge Reality")
+        XCTAssertEqual(node?.tls, true)
+        XCTAssertEqual(node?.sni, "www.yahoo.com")
+        XCTAssertEqual(node?.flow, "xtls-rprx-vision")
+        XCTAssertEqual(node?.realityPublicKey, "PUBKEY123")
+        XCTAssertEqual(node?.realityShortID, "ab12")
+        XCTAssertNil(node?.fingerprint)
+    }
+
+    func testVLESSShadowrocketMalformedBase64IsRejected() {
+        let authority = Data("auto:uuid-without-endpoint".utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "=", with: "")
+
+        XCTAssertNil(URIParser.parse("vless://\(authority)?remarks=Broken&tls=1"))
+    }
+
+    func testVLESSShadowrocketBase64WebSocketTLS() {
+        let uuid = "9a4b2c33-1111-2222-3333-444455556666"
+        let authority = Data("auto:\(uuid)@ws.example.com:443".utf8).base64EncodedString()
+        let uri = "vless://\(authority)?remarks=WS&obfs=websocket&obfsParam=cdn.example.com&path=%2Fvless&tls=1&peer=tls.example.com"
+        let node = URIParser.parse(uri)
+
+        XCTAssertEqual(node?.uuid, uuid)
+        XCTAssertEqual(node?.network, "ws")
+        XCTAssertEqual(node?.wsPath, "/vless")
+        XCTAssertEqual(node?.wsHost, "cdn.example.com")
+        XCTAssertEqual(node?.tls, true)
+        XCTAssertEqual(node?.sni, "tls.example.com")
+    }
+
     // MARK: - Trojan
 
     func testTrojan() {

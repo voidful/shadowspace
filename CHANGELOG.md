@@ -2,6 +2,13 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.6.1
+
+### 修正
+- **舊版 Shadowrocket VLESS 匯入**：支援 Base64 包裝的 `auto:UUID@host:port` authority，以及 `remarks`、`tls=1`、`peer`、`xtls=2`、`pbk`、`sid` 等舊式欄位；`xtls=2` 會正確映射為 `xtls-rprx-vision`，Reality 公鑰與 Short ID 不再於匯入時遺失。
+- **舊式傳輸欄位**：相容 `obfs=websocket`、`obfsParam` 與 `path`，同時拒絕破損或缺少端點的 Base64 VLESS 內容。
+- **Vision 節點重新匯入**：同一個手動 VLESS 節點可透過分享連結補上 `xtls-rprx-vision`，並保留既有節點 ID、群組關聯與中轉設定。
+
 ## v0.6.0
 
 ### 新增

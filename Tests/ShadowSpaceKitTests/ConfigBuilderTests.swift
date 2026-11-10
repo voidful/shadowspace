@@ -92,6 +92,23 @@ final class ConfigBuilderTests: XCTestCase {
         XCTAssertEqual(utls?["fingerprint"] as? String, "chrome")
     }
 
+    func testImportedRealityVisionPassesToBothEngines() throws {
+        let uuid = "9a4b2c33-1111-2222-3333-444455556666"
+        let key = Data(repeating: 1, count: 32).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        let shortID = "01020304050607"
+        let node = try XCTUnwrap(URIParser.parse(
+            "vless://\(uuid)@edge.example.com:443/?type=tcp&security=reality&pbk=\(key)&sid=\(shortID)&fp=chrome&sni=example.com&spx=%2F&flow=xtls-rprx-vision#Vision"))
+
+        let outbound = SingBoxConfigBuilder.outbound(for: node, tag: "Vision")
+        XCTAssertEqual(outbound["flow"] as? String, "xtls-rprx-vision")
+        let tls = try XCTUnwrap(outbound["tls"] as? [String: Any])
+        let reality = try XCTUnwrap(tls["reality"] as? [String: Any])
+        XCTAssertEqual(tls["server_name"] as? String, "example.com")
+        XCTAssertEqual(reality["public_key"] as? String, key)
+        XCTAssertEqual(reality["short_id"] as? String, shortID)
+        XCTAssertNoThrow(try NativeEngineAdapter.outbound(for: node))
+    }
+
     func testDefaultUTLSFingerprintApplied() {
         // TLS 節點未帶 fp → 套用預設瀏覽器指紋（抗 JA3 / 主動探測，對齊 Shadowrocket）
         var node = ProxyNode(name: "v", proto: .vless, server: "x.com", port: 443)

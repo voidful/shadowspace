@@ -249,31 +249,66 @@ enum URIParser {
     // MARK: - VLESS
 
     static func parseVLESS(_ raw: String) -> ProxyNode? {
-        guard let parts = splitURI(raw),
+        // Shadowrocket 的舊式分享連結會把 `auto:UUID@host:port` 整段做
+        // base64，再把 tls / reality 等設定放在 query；先還原成一般 authority，
+        // 後續即可和標準 VLESS URI 共用同一套欄位映射。
+        let normalized = normalizeShadowrocketVLESS(raw)
+        guard let parts = splitURI(normalized),
               let uuid = parts.userinfo, !uuid.isEmpty, parts.port > 0 else { return nil }
 
         var node = ProxyNode(
-            name: parts.displayName,
+            name: parts.query["remarks"] ?? parts.query["remark"] ?? parts.displayName,
             proto: .vless, server: parts.host, port: parts.port
         )
         node.uuid = uuid.removingPercentEncoding ?? uuid
 
         let q = parts.query
         let security = (q["security"] ?? "none").lowercased()
-        node.tls = (security == "tls" || security == "reality")
+        let hasReality = security == "reality" || q["pbk"]?.isEmpty == false
+        node.tls = security == "tls" || hasReality || truthy(q["tls"])
         node.sni = parts.sniValue
-        node.fingerprint = q["fp"]?.isEmpty == false ? q["fp"] : nil
+        node.fingerprint = q["fp"]?.isEmpty == false ? q["fp"] :
+            (q["client-fingerprint"]?.isEmpty == false ? q["client-fingerprint"] : nil)
         node.insecure = parts.insecureFlag
-        if security == "reality" {
+        if hasReality {
             node.realityPublicKey = q["pbk"]
             node.realityShortID = q["sid"]
         }
         if let flow = q["flow"], !flow.isEmpty {
             node.flow = flow
+        } else if q["xtls"] == "2" {
+            // Shadowrocket / Quantumult X 相容格式：2 代表 XTLS Vision。
+            node.flow = "xtls-rprx-vision"
         }
         applyTransport(&node, query: q)
         node.alpn = parts.alpnList
         return node
+    }
+
+    /// Shadowrocket 舊式 VLESS：
+    /// `vless://base64(auto:UUID@host:port)?remarks=...&tls=1&xtls=2...`
+    /// 標準 URI 本來就含 `@`，會原樣回傳。
+    private static func normalizeShadowrocketVLESS(_ raw: String) -> String {
+        guard let bodyStart = raw.range(of: "://")?.upperBound else { return raw }
+        let body = raw[bodyStart...]
+        let suffixStart = body.firstIndex { $0 == "?" || $0 == "#" } ?? body.endIndex
+        let encodedAuthority = String(body[..<suffixStart])
+        guard !encodedAuthority.contains("@"),
+              let decoded = Base64Util.decodeString(encodedAuthority),
+              let at = decoded.lastIndex(of: "@") else { return raw }
+
+        var userinfo = String(decoded[..<at])
+        // Shadowrocket 目前輸出 auto:UUID；也容忍同族工具使用 none:UUID。
+        if let colon = userinfo.firstIndex(of: ":") {
+            let method = userinfo[..<colon].lowercased()
+            if method == "auto" || method == "none" {
+                userinfo = String(userinfo[userinfo.index(after: colon)...])
+            }
+        }
+        let endpoint = decoded[decoded.index(after: at)...]
+        guard !userinfo.isEmpty, !endpoint.isEmpty else { return raw }
+
+        return String(raw[..<bodyStart]) + userinfo + "@" + endpoint + String(body[suffixStart...])
     }
 
     // MARK: - Trojan
@@ -382,11 +417,13 @@ enum URIParser {
     // MARK: - 共用：傳輸層參數 (vless / trojan)
 
     private static func applyTransport(_ node: inout ProxyNode, query q: [String: String]) {
-        switch (q["type"] ?? "tcp").lowercased() {
-        case "ws":
+        let transport = (q["type"] ?? q["obfs"] ?? "tcp").lowercased()
+        switch transport {
+        case "ws", "websocket":
             node.network = "ws"
             node.wsPath = q["path"]?.isEmpty == false ? q["path"] : "/"
-            node.wsHost = q["host"]?.isEmpty == false ? q["host"] : nil
+            node.wsHost = q["host"]?.isEmpty == false ? q["host"] :
+                (q["obfsParam"]?.isEmpty == false ? q["obfsParam"] : nil)
         case "grpc":
             node.network = "grpc"
             node.grpcServiceName = q["serviceName"]?.isEmpty == false ? q["serviceName"] : nil
@@ -397,6 +434,11 @@ enum URIParser {
         default:
             break
         }
+    }
+
+    private static func truthy(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return ["1", "true", "yes", "tls"].contains(value.lowercased())
     }
 }
 
