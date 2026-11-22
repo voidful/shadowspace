@@ -111,7 +111,8 @@ make dev
 修改網路設定需要管理員帳號。也可以關掉「連線時自動設定系統代理」，手動把 HTTP / SOCKS 代理指到 `127.0.0.1:7890`。
 
 **和 Shadowrocket 一樣有 VPN / TUN 模式嗎？**  
-`sing-box（完整）` 引擎支援 TUN / 增強模式，可接管終端機、Docker 等不吃系統代理的流量。
+在目前的 DMG 版中，「原生」引擎提供本機 HTTP／SOCKS 代理，可選擇套用系統代理；這不是 macOS 的 VPN 設定，也不會安裝 Network Extension。連線時不出現系統的 VPN 項目是預期行為。
+需要接管不使用系統代理的程式時，`sing-box（完整）` 引擎另有 TUN／增強模式。
 
 **訂閱匯入失敗？**  
 支援 base64 節點清單、Clash / Clash.Meta YAML 與 sing-box JSON，會依內容自動判型。若仍失敗，可到「設定 → 訂閱」調整拉取 User-Agent 再試（機場常依 UA 回傳不同格式）。
