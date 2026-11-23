@@ -77,6 +77,37 @@ private struct PreparedSingBoxConfig: @unchecked Sendable {
     let tagByNodeID: [UUID: String]
     let tagByGroupID: [UUID: String]
 }
+
+enum ConnectionTransport: Equatable {
+    case localProxy(port: Int)
+    case systemProxy(port: Int)
+    case tun
+
+    init(tun: Bool, systemProxy: Bool, port: Int) {
+        if tun { self = .tun }
+        else if systemProxy { self = .systemProxy(port: port) }
+        else { self = .localProxy(port: port) }
+    }
+
+    var label: String {
+        switch self {
+        case .localProxy: return String(localized: "本機代理")
+        case .systemProxy: return String(localized: "系統代理")
+        case .tun: return String(localized: "TUN 全域")
+        }
+    }
+
+    var statusSentence: String {
+        switch self {
+        case .localProxy(let port):
+            return String(localized: "本機代理已就緒。請將 App 的 HTTP 或 SOCKS 代理設為 127.0.0.1:\(port)。")
+        case .systemProxy:
+            return String(localized: "系統代理已就緒。使用系統代理的 App 會依目前模式分流。")
+        case .tun:
+            return String(localized: "TUN 已接管系統路由，流量會依目前模式分流。")
+        }
+    }
+}
 #endif
 
 /// App 的中央狀態：節點、訂閱、規則、連線生命週期、流量統計。
@@ -135,6 +166,7 @@ final class AppState: ObservableObject {
     private var tagByNodeID: [UUID: String] = [:]
     private var tagByGroupID: [UUID: String] = [:]
     private var systemProxyActive = false
+    private var activeTransport: ConnectionTransport?
     private let systemProxyController = SystemProxyController()
 
     private var api: ClashAPIClient {
@@ -161,15 +193,12 @@ final class AppState: ObservableObject {
         return "—"
     }
 
-    /// 目前接管流量的方式，以「實際啟動的引擎」為準而非設定值——
-    /// 原生引擎遇不支援節點會自動回退 sing-box，此時即使 tunMode 為真也不是 TUN。
+    /// 目前已套用的接管方式。偏好設定變更後，重新連線才更新。
     var transportDescription: String {
 #if APP_STORE
         return String(localized: "透明代理")
 #else
-        return (nativeEngine == nil && settings.tunMode)
-            ? String(localized: "TUN 全域")
-            : String(localized: "系統代理")
+        return activeTransport?.label ?? ""
 #endif
     }
 
@@ -178,12 +207,22 @@ final class AppState: ObservableObject {
 #if APP_STORE
         return "透明代理已就緒，流量正透過「\(selectedOutboundName)」轉送"
 #else
-        if nativeEngine == nil && settings.tunMode {
-            return "TUN 模式已接管全部流量，正透過「\(selectedOutboundName)」轉送"
-        }
-        return "系統代理已就緒，流量正透過「\(selectedOutboundName)」轉送"
+        return activeTransport?.statusSentence ?? ""
 #endif
     }
+
+#if !APP_STORE
+    func selectEngine(_ kind: EngineKind, enableTUN: Bool = false) {
+        var next = settings
+        next.engineKind = kind
+        if enableTUN { next.tunMode = true }
+        settings = next
+        save()
+        if connectionState != .disconnected {
+            toastMessage = String(localized: "已更新接管設定，重新連線後生效")
+        }
+    }
+#endif
 
     /// sing-box Tailscale endpoint 在未登入時會把驗證網址寫進日誌；抽出來讓設定頁可直接開啟。
     nonisolated static func tailscaleLoginURL(in lines: [String]) -> URL? {
@@ -359,7 +398,7 @@ final class AppState: ObservableObject {
         scheduleSave()
         guard connectionState != .disconnected else { return }
 #if !APP_STORE
-        if settings.tunMode {
+        if activeTransport == .tun || settings.tunMode {
             toastMessage = "已儲存，重新連線後生效"
             return
         }
@@ -383,6 +422,7 @@ final class AppState: ObservableObject {
             Task { [weak self] in
                 guard let self else { return }
                 await self.disconnect()
+                guard self.connectionState == .disconnected else { return }
                 await self.connect()
                 if self.connectionState == .connected {
                     self.toastMessage = "設定已套用"
@@ -422,16 +462,16 @@ final class AppState: ObservableObject {
 #if !APP_STORE
         // 主要網路服務可能變了（例如 Wi-Fi↔乙太網路）：防抖後交給背景序列控制器。
         // 控制器會比對已套用狀態；代理設定自己觸發的重複 NWPath 事件不會再執行 networksetup。
-        if satisfied, connectionState == .connected, systemProxyActive, !settings.tunMode {
+        if satisfied, connectionState == .connected, case .systemProxy(let port) = activeTransport {
             proxyReapplyTask?.cancel()
             proxyReapplyTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, let self,
                       self.connectionState == .connected,
-                      self.systemProxyActive else { return }
+                      self.activeTransport == .systemProxy(port: port) else { return }
                 do {
                     _ = try await self.systemProxyController.enableIfNeeded(
-                        port: self.settings.mixedPort,
+                        port: port,
                         bypassHosts: self.proxyServerHosts)
                 } catch {
                     self.appendLog("[系統代理] 網路切換後重新套用失敗：\(error.localizedDescription)")
@@ -499,7 +539,7 @@ final class AppState: ObservableObject {
 
             logs.clear()
             try Task.checkCancellation()   // 啟動引擎前（含引擎已安裝的常見路徑）給取消一個機會
-            if settings.tunMode {
+            if work.settings.tunMode {
                 try engine.startPrivileged(configData: prepared.data)
             } else {
                 try engine.start(configData: prepared.data)
@@ -515,15 +555,17 @@ final class AppState: ObservableObject {
             await api.setMode(mode.clashMode)
 
             // TUN 模式由引擎接管路由，不需要動系統代理
-            if !settings.tunMode && settings.autoSystemProxy {
+            if !work.settings.tunMode && work.settings.autoSystemProxy {
                 try await systemProxyController.enableIfNeeded(
-                    port: settings.mixedPort, bypassHosts: proxyServerHosts)
+                    port: work.settings.mixedPort, bypassHosts: proxyServerHosts)
                 systemProxyActive = true
                 try Task.checkCancellation()
             }
 
             traffic.resetSession()
             startTrafficStream()
+            activeTransport = ConnectionTransport(tun: work.settings.tunMode,
+                                                  systemProxy: systemProxyActive, port: work.settings.mixedPort)
             connectionState = .connected
             save()
         } catch {
@@ -532,6 +574,7 @@ final class AppState: ObservableObject {
                 await systemProxyController.disable()
                 systemProxyActive = false
             }
+            activeTransport = nil
             connectionState = .disconnected
             engineInstallStatus = nil
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
@@ -580,6 +623,7 @@ final class AppState: ObservableObject {
             errorMessage = "找不到可用節點"
             return
         }
+        let settings = settings
         do {
             let outbound = try NativeEngineAdapter.outbound(
                 for: node,
@@ -604,6 +648,8 @@ final class AppState: ObservableObject {
             traffic.resetSession()
             logs.replace(with: ["[原生引擎] 啟動於 127.0.0.1:\(settings.mixedPort)，出站「\(node.name)」（\(node.proto.displayName)）"])
             startNativeTrafficPolling()
+            activeTransport = ConnectionTransport(tun: false,
+                                                  systemProxy: systemProxyActive, port: settings.mixedPort)
             connectionState = .connected
             save()
         } catch {
@@ -612,6 +658,7 @@ final class AppState: ObservableObject {
                 await systemProxyController.disable()
                 systemProxyActive = false
             }
+            activeTransport = nil
             connectionState = .disconnected
             if error is CancellationError {
                 toastMessage = "已取消連線"
@@ -650,7 +697,9 @@ final class AppState: ObservableObject {
         do {
             try await TunnelManager.stop()
         } catch {
+            connectionState = .connected
             errorMessage = error.localizedDescription
+            return
         }
 #endif
         await teardownAfterStop()
@@ -681,6 +730,7 @@ final class AppState: ObservableObject {
         engine.stop()
         nativeEngine?.stop()
         nativeEngine = nil
+        activeTransport = nil
 #endif
         traffic.clearLive()
         connectionStats.clear()
@@ -820,6 +870,29 @@ final class AppState: ObservableObject {
         let (parsed, subURLs, unparsed) = await Task.detached(priority: .userInitiated) {
             URIParser.classify(text)
         }.value
+        return await finishImport(parsed, subURLs: subURLs, unparsed: unparsed, reportFailure: reportFailure)
+    }
+
+    func importSingBoxFile(_ url: URL) async {
+        let parsed = await Task.detached(priority: .userInitiated) { () -> [ProxyNode]? in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return SingBoxNodeParser.parse(data)
+        }.value
+        guard let parsed else {
+            errorMessage = String(localized: "無法讀取設定檔。")
+            return
+        }
+        guard !parsed.isEmpty else {
+            errorMessage = String(localized: "設定檔沒有可匯入的節點。請選擇 sing-box 客戶端 JSON。")
+            return
+        }
+        _ = await finishImport(parsed, subURLs: [], unparsed: [], reportFailure: true)
+    }
+
+    private func finishImport(_ parsed: [ProxyNode], subURLs: [String], unparsed: [String],
+                              reportFailure: Bool) async -> String? {
         let merged = ImportService.mergeNodes(parsed, into: nodes)
         if merged.added > 0 || !merged.upgraded.isEmpty {
             // 一次發布，避免數千個節點逐筆讓 SwiftUI 重繪。
@@ -845,20 +918,24 @@ final class AppState: ObservableObject {
 
         var parts: [String] = []
         if merged.added > 0 { parts.append("匯入 \(merged.added) 個節點") }
-        if !merged.upgraded.isEmpty { parts.append("更新 \(merged.upgraded.count) 個 Vision 節點") }
+        if !merged.upgraded.isEmpty { parts.append("更新 \(merged.upgraded.count) 個節點") }
         if subAdded > 0 { parts.append("新增 \(subAdded) 個訂閱") }
+        let pinHint = unparsed.contains(where: URIParser.requiresHysteriaCertificate)
+            ? String(localized: "含 pinSHA256 的 Hysteria 2 連結需要改用內含憑證的客戶端 JSON。") : nil
+        if parts.isEmpty, !parsed.isEmpty, subErrors.isEmpty { parts.append(String(localized: "略過重複節點")) }
         if parts.isEmpty {
 #if APP_STORE
             let noneFound = "沒有找到可匯入的內容。支援 \(URIParser.appStoreSupportedSchemesText) 連結或訂閱網址。"
 #else
             let noneFound = "沒有找到可匯入的內容。支援 \(URIParser.supportedSchemesText) 連結或訂閱網址。"
 #endif
-            let err = subErrors.first ?? noneFound
+            let err = pinHint ?? subErrors.first ?? noneFound
             if reportFailure { errorMessage = err }
             return err
         }
         var summary = "已" + parts.joined(separator: "、")
         if !unparsed.isEmpty { summary += "；另有 \(unparsed.count) 行無法辨識" }
+        if let pinHint { summary += "。" + pinHint }
         toastMessage = summary
         return nil
     }

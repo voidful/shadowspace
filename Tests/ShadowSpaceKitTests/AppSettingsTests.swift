@@ -7,6 +7,15 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(AppSettings().engineKind, .native)
     }
 
+    func testConnectionTransportReportsTheAppliedCaptureMode() {
+        XCTAssertEqual(ConnectionTransport(tun: false, systemProxy: false, port: 8088),
+                       .localProxy(port: 8088))
+        XCTAssertEqual(ConnectionTransport(tun: false, systemProxy: true, port: 8088),
+                       .systemProxy(port: 8088))
+        XCTAssertEqual(ConnectionTransport(tun: true, systemProxy: false, port: 8088),
+                       .tun)
+    }
+
     func testMissingEngineKindDecodesAsNative() throws {
         let data = """
         {

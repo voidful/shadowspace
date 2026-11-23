@@ -10,9 +10,11 @@ enum ImportService {
         let port: Int
         let proto: NodeProtocol
         let name: String
+        let certificate: [String]?
         let vision: Bool
 
         init(_ node: ProxyNode, vision: Bool? = nil) {
+            certificate = node.tlsCertificate
             server = node.server
             port = node.port
             proto = node.proto
@@ -30,11 +32,34 @@ enum ImportService {
             let node = existing[$0]
             return node.proto == .vless && node.subscriptionID == nil && (node.flow ?? "").isEmpty
         }, by: { NodeDedupKey(existing[$0]) })
+        // Older releases discarded hy2vpn's PEM. Keep selection and routing when
+        // the same manual account is reimported with its certificate.
+        let legacyHY2 = Dictionary(grouping: existing.indices.filter {
+            let n = existing[$0]
+            return n.proto == .hysteria2 && n.subscriptionID == nil && n.tlsCertificate == nil
+        }, by: { NodeDedupKey(existing[$0]) })
         var upgraded: [UUID] = []
 
         for node in incoming {
             let key = NodeDedupKey(node)
             guard known.insert(key).inserted else { continue }
+            if node.proto == .hysteria2, node.tlsCertificate != nil, !node.insecure,
+               let password = node.password, !password.isEmpty {
+                var legacy = node
+                legacy.tlsCertificate = nil
+                let matches = (legacyHY2[NodeDedupKey(legacy)] ?? []).filter { index in
+                    let old = nodes[index]
+                    return old.tlsCertificate == nil && old.password == password && old.sni == node.sni
+                }
+                if matches.count == 1, let index = matches.first {
+                    var replacement = node
+                    replacement.id = nodes[index].id
+                    replacement.dialerNodeID = nodes[index].dialerNodeID
+                    nodes[index] = replacement
+                    upgraded.append(replacement.id)
+                    continue
+                }
+            }
             if key.vision,
                let candidates = legacyIndices[NodeDedupKey(node, vision: false)] {
                 let matches = candidates.filter { index in

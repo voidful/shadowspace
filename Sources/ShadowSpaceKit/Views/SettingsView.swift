@@ -55,24 +55,28 @@ struct SettingsView: View {
         } footer: {
             Text("App Store 版使用 Apple NetworkExtension 透明代理，不包含 sing-box 子程序、TUN 管理員授權或系統代理改寫。支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）。")
                 .font(.caption).foregroundStyle(.secondary)
+            Text("首次連線時，請允許 macOS 加入 ShadowSpace 的代理設定。")
+                .font(.caption).foregroundStyle(.secondary)
         }
 #else
         Section {
             Picker("代理引擎", selection: Binding(
                 get: { state.settings.engineKind },
-                set: { newKind in
-                    state.settings.engineKind = newKind
-                    state.save()
-                    if state.connectionState == .connected {
-                        state.toastMessage = "已切換引擎，重新連線後生效"
-                    }
-                }
+                set: { state.selectEngine($0) }
             )) {
                 ForEach(EngineKind.allCases, id: \.self) { kind in
                     Text(kind.displayName).tag(kind)
                 }
             }
+            .disabled(state.connectionState == .connecting || state.connectionState == .stopping)
             if state.settings.engineKind == .native {
+                Text("GitHub 版的原生引擎使用本機 HTTP／SOCKS 代理，不會安裝 NetworkExtension 或新增 VPN 設定。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("切換至 sing-box 並啟用 TUN") {
+                    state.selectEngine(.singbox, enableTUN: true)
+                }
+                .disabled(state.connectionState == .connecting || state.connectionState == .stopping)
+                .help("下次連線時，TUN 會接管終端機等不使用系統代理的流量，並要求管理員授權。")
                 Toggle(isOn: state.appliedSetting(\.nativeTLS)) {
                     CaptionedLabel("原生 TLS 指紋偽裝（抗封鎖）",
                                    "以自建 TLS 1.3 客戶端取代系統 TLS，把 ClientHello 偽裝成瀏覽器（macOS 26+ 送後量子指紋）。套用於 Trojan / VLESS 的 TCP+TLS；ws/wss 仍走系統 TLS。")
@@ -113,8 +117,9 @@ struct SettingsView: View {
             if state.settings.engineKind == .singbox {
                 Toggle(isOn: state.appliedSetting(\.tunMode)) {
                     CaptionedLabel("TUN 模式（增強模式）",
-                                   "建立虛擬網卡接管全部流量，含終端機與不吃系統代理的 App。連線時需輸入一次管理員密碼。")
+                                   "建立虛擬網卡，接管終端機與不使用系統代理的 App。連線時需管理員授權。TUN 不會新增 macOS VPN 設定。")
                 }
+                .disabled(state.connectionState == .connecting || state.connectionState == .stopping)
             }
             if state.settings.engineKind == .native || !state.settings.tunMode {
                 Toggle("連線時自動設定系統代理", isOn: state.setting(\.autoSystemProxy))

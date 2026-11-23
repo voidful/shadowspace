@@ -472,6 +472,7 @@ enum SingBoxConfigBuilder {
                 "enabled": true,
                 "server_name": node.sni ?? node.wsHost ?? node.server,
             ]
+            if let pem = node.tlsCertificate { tls["certificate"] = pem }
             if node.insecure { tls["insecure"] = true }
             if let alpn = node.alpn, !alpn.isEmpty { tls["alpn"] = alpn }
             // uTLS 指紋：節點自帶 fp 優先；否則對 TLS-over-TCP 協議套用預設瀏覽器指紋

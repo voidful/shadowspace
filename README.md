@@ -110,8 +110,19 @@ make dev
 **設定系統代理失敗？**  
 修改網路設定需要管理員帳號。也可以關掉「連線時自動設定系統代理」，手動把 HTTP / SOCKS 代理指到 `127.0.0.1:7890`。
 
-**和 Shadowrocket 一樣有 VPN / TUN 模式嗎？**  
-`sing-box（完整）` 引擎支援 TUN / 增強模式，可接管終端機、Docker 等不吃系統代理的流量。
+**為什麼 GitHub 版選了原生引擎，macOS 沒出現 VPN 或網路擴充功能？**
+
+GitHub DMG 的原生引擎開啟本機 HTTP／SOCKS 代理。開啟「連線時自動設定系統代理」後，使用 macOS 系統代理的 App 會走這個入口。這個模式不會安裝 NetworkExtension 或新增 VPN 設定。
+
+若要讓終端機等不使用系統代理的 App 也能分流，可在「設定 → 引擎」點選「切換至 sing-box 並啟用 TUN」。回到首頁連線，並依 macOS 提示完成管理員授權。TUN 會建立虛擬網卡，在 macOS 的 VPN 清單中不會新增設定。
+
+App Store 建置使用 Apple NetworkExtension 透明代理。該建置需以對應的 entitlement 簽署，首次連線時請允許 macOS 加入 ShadowSpace 的代理設定。
+
+**如何使用 [hy2vpn](https://github.com/joshhu/hy2vpn) 產生的雙線路設定？**
+
+在 GitHub 版選「節點 → 新增 → 匯入 sing-box JSON…」，開啟 `client/sing-box-client.json`。在「設定 → 引擎」選「sing-box（完整）」。在節點清單選 `home-reality` 走 VLESS + XTLS Vision + REALITY（TCP），選 `home-hy2` 走 Hysteria 2（UDP）。兩者是可切換的獨立節點。App Store 版的原生引擎不支援 Hysteria 2。
+
+ShadowSpace 只取出節點，保留 Hysteria 2 的內嵌 PEM 憑證。DNS、TUN 和分流規則由 ShadowSpace 管理。若分享連結含 `pinSHA256`，請使用上述 JSON；這個值是整張憑證的指紋，不能當作 sing-box 的公鑰指紋。
 
 **訂閱匯入失敗？**  
 支援 base64 節點清單、Clash / Clash.Meta YAML 與 sing-box JSON，會依內容自動判型。若仍失敗，可到「設定 → 訂閱」調整拉取 User-Agent 再試（機場常依 UA 回傳不同格式）。

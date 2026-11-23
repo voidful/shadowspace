@@ -67,6 +67,7 @@ struct ProxyNode: Codable, Identifiable, Hashable {
     var tls: Bool = false
     var sni: String?
     var insecure: Bool = false
+    var tlsCertificate: [String]?   // sing-box inline PEM (one string or an array of lines)
     var alpn: [String]?
     var fingerprint: String?     // uTLS 指紋
     var realityPublicKey: String?
@@ -109,7 +110,7 @@ struct ProxyNode: Codable, Identifiable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, name, proto, server, port
         case method, password, uuid, alterId, security, flow, username
-        case tls, sni, insecure, alpn, fingerprint, realityPublicKey, realityShortID
+        case tls, sni, insecure, tlsCertificate, alpn, fingerprint, realityPublicKey, realityShortID
         case network, wsPath, wsHost, grpcServiceName
         case obfs, obfsPassword, congestionControl
         case wgPrivateKey, wgPeerPublicKey, wgPresharedKey, wgLocalAddress, wgMTU
@@ -134,6 +135,7 @@ struct ProxyNode: Codable, Identifiable, Hashable {
         tls = try c.decodeIfPresent(Bool.self, forKey: .tls) ?? false
         sni = try c.decodeIfPresent(String.self, forKey: .sni)
         insecure = try c.decodeIfPresent(Bool.self, forKey: .insecure) ?? false
+        tlsCertificate = try c.decodeIfPresent([String].self, forKey: .tlsCertificate)
         alpn = try c.decodeIfPresent([String].self, forKey: .alpn)
         fingerprint = try c.decodeIfPresent(String.self, forKey: .fingerprint)
         realityPublicKey = try c.decodeIfPresent(String.self, forKey: .realityPublicKey)

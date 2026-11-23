@@ -75,6 +75,17 @@ enum SingBoxNodeParser {
         }
 
         if let tls = ob["tls"] as? [String: Any], (tls["enabled"] as? Bool) == true {
+            // File references belong to the source machine. Do not drop a pin or
+            // client identity, even when the source also specifies insecure=true.
+            for key in ["certificate_path", "certificate_public_key_sha256", "client_certificate",
+                        "client_certificate_path", "client_key", "client_key_path"] where tls[key] != nil {
+                return nil
+            }
+            if let certificate = tls["certificate"] {
+                if let lines = certificate as? [String], !lines.isEmpty { node.tlsCertificate = lines }
+                else if let pem = certificate as? String, !pem.isEmpty { node.tlsCertificate = [pem] }
+                else { return nil }
+            }
             node.tls = true
             node.sni = tls["server_name"] as? String
             node.insecure = (tls["insecure"] as? Bool) ?? false

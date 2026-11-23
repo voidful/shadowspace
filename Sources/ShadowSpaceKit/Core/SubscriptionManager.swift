@@ -87,8 +87,7 @@ enum SubscriptionManager {
     /// 純函式（不碰網路），可離線測判型優先序。
     static func parseContent(_ text: String, data: Data) -> [ProxyNode] {
         if SingBoxNodeParser.looksLikeConfig(text) {
-            let parsed = SingBoxNodeParser.parse(data)
-            return parsed.isEmpty ? URIParser.parseMultiple(text) : parsed
+            return SingBoxNodeParser.parse(data)
         } else if ClashYAMLParser.looksLikeConfig(text) {
             let parsed = ClashYAMLParser.parse(text)
             return parsed.isEmpty ? URIParser.parseMultiple(text) : parsed

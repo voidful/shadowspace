@@ -101,6 +101,10 @@ enum URIParser {
            decoded.contains("://") {
             content = decoded
         }
+        if content.hasPrefix("{") {
+            let nodes = SingBoxNodeParser.parse(Data(content.utf8))
+            return (nodes, [], nodes.isEmpty ? ["JSON"] : [])
+        }
         if WireGuardParser.looksLikeConfig(content), let wg = WireGuardParser.parse(content) {
             return (nodes: [wg], subscriptionURLs: [], unparsedLines: [])
         }
@@ -334,8 +338,18 @@ enum URIParser {
 
     // MARK: - Hysteria2
 
+    static func requiresHysteriaCertificate(_ raw: String) -> Bool {
+        guard let parts = splitURI(raw), ["hy2", "hysteria2"].contains(parts.scheme) else { return false }
+        return hasCertificatePin(parts)
+    }
+
+    private static func hasCertificatePin(_ parts: URIParts) -> Bool {
+        // Hysteria pins the whole DER certificate. sing-box pins the public key.
+        parts.query.keys.contains { $0.lowercased() == "pinsha256" }
+    }
+
     static func parseHysteria2(_ raw: String) -> ProxyNode? {
-        guard let parts = splitURI(raw), parts.port > 0 else { return nil }
+        guard let parts = splitURI(raw), parts.port > 0, !hasCertificatePin(parts) else { return nil }
         var node = ProxyNode(
             name: parts.displayName,
             proto: .hysteria2, server: parts.host, port: parts.port

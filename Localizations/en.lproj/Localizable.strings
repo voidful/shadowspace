@@ -14,6 +14,11 @@
 "App Store 版使用 Apple NetworkExtension 透明代理，不包含 sing-box 子程序、TUN 管理員授權或系統代理改寫。支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss）。" = "The App Store edition uses Apple NetworkExtension transparent proxy — no sing-box subprocess, TUN admin authorisation, or system-proxy changes. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss).";
 "App Store 版使用原生代理核心與 NetworkExtension，不包含外部代理核心或管理員授權流程。" = "The App Store edition uses a native proxy core with NetworkExtension — no external proxy core or admin authorisation flow.";
 "原生 NetworkExtension" = "Native NetworkExtension";
+"首次連線時，請允許 macOS 加入 ShadowSpace 的代理設定。" = "On first connection, allow macOS to add the ShadowSpace proxy configuration.";
+"GitHub 版的原生引擎使用本機 HTTP／SOCKS 代理，不會安裝 NetworkExtension 或新增 VPN 設定。" = "In the GitHub edition, the native engine uses a local HTTP or SOCKS proxy. It does not install a NetworkExtension or add a VPN configuration.";
+"切換至 sing-box 並啟用 TUN" = "Switch to sing-box and enable TUN";
+"下次連線時，TUN 會接管終端機等不使用系統代理的流量，並要求管理員授權。" = "The next connection will request administrator authorization and use TUN for traffic from apps that ignore the system proxy, including Terminal.";
+"已更新接管設定，重新連線後生效" = "Reconnect to apply the new traffic capture settings.";
 "原生引擎純 Apple 框架、不依賴外部核心，支援 SS / Trojan / VLESS / SOCKS5（含 ws/wss），並支援 REALITY、XTLS Vision 與自建 TLS 1.3 偽裝瀏覽器指紋；尚不支援 Hysteria2 / TUIC / VMess / TUN——這些請改用 sing-box 引擎。" = "The native engine uses pure Apple frameworks with no external core. Supports SS / Trojan / VLESS / SOCKS5 (incl. ws/wss), plus REALITY, XTLS Vision, and a built-in TLS 1.3 browser-fingerprint disguise; Hysteria2 / TUIC / VMess / TUN are not yet supported — use the sing-box engine for those.";
 "原生 TLS 指紋偽裝（抗封鎖）" = "Native TLS fingerprint disguise (anti-censorship)";
 "TLS 指紋偽裝（uTLS）" = "TLS fingerprint disguise (uTLS)";
@@ -62,7 +67,7 @@
 "TLS 分片（抗封鎖）" = "TLS fragmentation (anti-censorship)";
 "把 TLS ClientHello 切成多段送出，干擾 DPI 的 SNI 偵測。原生引擎適用。" = "Splits the TLS ClientHello into several segments to disrupt DPI SNI detection. Native engine only.";
 "TUN 模式（增強模式）" = "TUN mode (enhanced)";
-"建立虛擬網卡接管全部流量，含終端機與不吃系統代理的 App。連線時需輸入一次管理員密碼。" = "Creates a virtual NIC to capture all traffic, including the terminal and apps that ignore the system proxy. Requires your admin password once when connecting.";
+"建立虛擬網卡，接管終端機與不使用系統代理的 App。連線時需管理員授權。TUN 不會新增 macOS VPN 設定。" = "Creates a virtual interface for Terminal and apps that ignore the system proxy. Connecting requires administrator authorization. TUN does not add a macOS VPN configuration.";
 "連線時自動設定系統代理" = "Set system proxy automatically when connecting";
 "偵測到網路就自動連線" = "Auto-connect when network is available";
 "開機或網路切換、恢復時自動連上；手動斷線後不會自動重連。" = "Connects automatically on startup or network change/recovery; won't auto-reconnect after a manual disconnect.";
@@ -148,6 +153,12 @@
 "（TUN 全域）" = "(TUN global)";
 "（未填寫）" = "(not set)";
 "（系統代理）" = "(system proxy)";
+"本機代理" = "Local proxy";
+"本機代理已就緒。請將 App 的 HTTP 或 SOCKS 代理設為 127.0.0.1:%lld。" = "The local proxy is ready. Set your app's HTTP or SOCKS proxy to 127.0.0.1:%lld.";
+"系統代理已就緒。使用系統代理的 App 會依目前模式分流。" = "The system proxy is ready. Apps that use it are routed according to the current mode.";
+"TUN 已接管系統路由，流量會依目前模式分流。" = "TUN is active. Traffic is routed according to the current mode.";
+"macOS 未啟動 ShadowSpace 的透明代理。請確認系統設定已允許 ShadowSpace 的網路擴充功能。" = "macOS did not start the ShadowSpace transparent proxy. Check that the ShadowSpace network extension is allowed in System Settings.";
+"macOS 尚未停止 ShadowSpace 的透明代理。請稍候再試。" = "macOS has not stopped the ShadowSpace transparent proxy. Wait a moment and try again.";
 "尚未連線" = "Not connected";
 "目前節點" = "Current node";
 "即時流量" = "Live traffic";
@@ -323,3 +334,10 @@
 "自動（最快）" = "Auto (fastest)";
 "sing-box（完整）" = "sing-box (full)";
 "原生" = "Native";
+
+"匯入 sing-box JSON…" = "Import sing-box JSON…";
+"只匯入節點；DNS、分流與 TUN 沿用 ShadowSpace 設定。" = "Only nodes will be imported. ShadowSpace keeps its DNS, routing, and TUN settings.";
+"無法讀取設定檔。" = "Could not read the configuration file.";
+"設定檔沒有可匯入的節點。請選擇 sing-box 客戶端 JSON。" = "No supported nodes found. Choose a sing-box client JSON file.";
+"含 pinSHA256 的 Hysteria 2 連結需要改用內含憑證的客戶端 JSON。" = "For Hysteria 2 links with pinSHA256, import the client JSON containing the certificate.";
+"略過重複節點" = "Skipped duplicate nodes";

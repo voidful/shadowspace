@@ -2,6 +2,12 @@
 
 版本依語意化版本（SemVer）。
 
+## v0.7.0（build 14）
+
+- 節點頁可選取或貼上 sing-box 客戶端 JSON。匯入 hy2vpn 設定後可切換 VLESS + XTLS Vision + REALITY 與 Hysteria 2；DNS、分流與 TUN 沿用 ShadowSpace 的設定。
+- Hysteria 2 會保留內嵌的自簽憑證。舊手動節點重新匯入時可補上憑證。只有整張憑證指紋（`pinSHA256`）的分享連結不會降級成略過驗證，請改用內含憑證的 JSON。
+- 首頁依實際連線顯示本機代理、系統代理或 TUN。GitHub 版可在引擎設定中切換到 sing-box 並啟用 TUN。
+
 ## v0.6.1
 
 ### 修正

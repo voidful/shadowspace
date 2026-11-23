@@ -23,6 +23,7 @@ enum NodeShare {
     }
 
     static func uri(for node: ProxyNode) -> String? {
+        guard node.tlsCertificate == nil else { return nil } // URI cannot carry the trust anchor.
         let name = "#" + encodeComponent(node.name)
         let host = hostPart(node)
         switch node.proto {

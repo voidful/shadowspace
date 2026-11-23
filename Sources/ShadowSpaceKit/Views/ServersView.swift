@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 節點管理：訂閱分組、延遲測試、匯入。
 struct ServersView: View {
@@ -30,6 +31,7 @@ struct ServersView: View {
                     .help("自動辨識剪貼簿中的節點連結或訂閱網址")
 
                 Menu {
+                    Button("匯入 sing-box JSON…") { chooseSingBoxFile() }
                     Button("貼上連結匯入…") { showImportSheet = true }
                     Button("掃描剪貼簿 QR") { Task { await state.importQRFromClipboard() } }
                     Button("手動新增節點…") { showManualAdd = true }
@@ -206,13 +208,13 @@ struct ServersView: View {
                 Button("測試延遲") { Task { await state.pingNode(node.id) } }
                 Button("編輯…") { editingNode = node }
                 Divider()
-                Button("複製分享連結") {
-                    if let uri = NodeShare.uri(for: node) {
+                if let uri = NodeShare.uri(for: node) {
+                    Button("複製分享連結") {
                         NSPasteboard.copyString(uri)
                         state.toastMessage = "已複製分享連結"
                     }
+                    Button("顯示 QR Code…") { qrNode = node }
                 }
-                Button("顯示 QR Code…") { qrNode = node }
                 Divider()
                 Button("刪除", role: .destructive) {
                     state.deleteNode(node.id)
@@ -272,6 +274,14 @@ struct ServersView: View {
         }
     }
 
+    private func chooseSingBoxFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.message = String(localized: "只匯入節點；DNS、分流與 TUN 沿用 ShadowSpace 設定。")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await state.importSingBoxFile(url) }
+    }
+
     // MARK: - 空狀態
 
     private var emptyState: some View {
@@ -282,6 +292,7 @@ struct ServersView: View {
         } actions: {
             ImportFromClipboardButton(state: state)
                 .buttonStyle(.borderedProminent)
+            Button("匯入 sing-box JSON…") { chooseSingBoxFile() }
             Button("手動貼上…") { showImportSheet = true }
         }
     }

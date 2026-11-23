@@ -22,6 +22,9 @@ enum NativeEngineAdapter {
     /// ProxyNode → ShadowCore.Outbound。不支援的協議/特性丟出清楚的錯誤。
     /// tls.nativeTLS：Trojan/VLESS 的 TCP+TLS 改走自建 TLS 1.3（瀏覽器指紋）；tls.fingerprint：指紋預設。
     static func outbound(for node: ProxyNode, tls: TLSOptions = TLSOptions()) throws -> Outbound {
+        guard node.tlsCertificate == nil else {
+            throw AdapterError.unsupported("含自訂 TLS 憑證的節點需要 sing-box 引擎")
+        }
         let host = node.server
         let port = UInt16(clamping: node.port)
 
